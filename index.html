@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tindahan ni Duane</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <div class="logo">
+            <h1>🏪 Tindahan<br>ni Duane</h1>
+            <span>Sari-Sari Store POS</span>
+        </div>
+        <nav class="nav">
+            <div class="nav-section">Main</div>
+            <div class="nav-item active" onclick="showPage('dashboard', this)">
+                <span class="icon">📊</span> Dashboard
+            </div>
+            <div class="nav-item" onclick="showPage('pos', this)">
+                <span class="icon">🛒</span> Benta (POS)
+            </div>
+            <div class="nav-section">Inventory</div>
+            <div class="nav-item" onclick="showPage('products', this)">
+                <span class="icon">📦</span> Products
+            </div>
+            <div class="nav-item" onclick="showPage('bundles', this)">
+                <span class="icon">🎁</span> Bundle Pricing
+            </div>
+            <div class="nav-item" onclick="showPage('stocklogs', this)">
+                <span class="icon">📋</span> Stock Logs
+            </div>
+            <div class="nav-section">Finance</div>
+            <div class="nav-item" onclick="showPage('sales', this)">
+                <span class="icon">💰</span> Sales History
+            </div>
+            <div class="nav-item" onclick="showPage('credits', this)">
+                <span class="icon">📒</span> Utang
+                <span id="utang-badge" class="number-pill" style="display:none"></span>
+            </div>
+            <div class="nav-item" onclick="showPage('expenses', this)">
+                <span class="icon">🧾</span> Expenses
+            </div>
+            <div class="nav-section">People</div>
+            <div class="nav-item" onclick="showPage('customers', this)">
+                <span class="icon">👥</span> Customers
+            </div>
+        </nav>
+        <div class="sidebar-footer">
+            v1.0 · Demo Mode
+        </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+        <div class="topbar">
+            <h2 id="page-title">Dashboard</h2>
+            <div class="topbar-right">
+                <span id="clock" style="font-size:13px;color:var(--muted)"></span>
+            </div>
+        </div>
+
+        <div class="content">
+
+            <!-- ================================================ -->
+            <!-- DASHBOARD PAGE                                    -->
+            <!-- ================================================ -->
+            <div id="page-dashboard" class="page active fade-in">
+                <div class="stats-grid">
+                    <div class="stat-card yellow">
+                        <div class="stat-label">Today's Sales</div>
+                        <div class="stat-value yellow" id="stat-sales">₱0</div>
+                        <div class="stat-sub" id="stat-txn">0 transactions</div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-label">Total Products</div>
+                        <div class="stat-value green" id="stat-products">0</div>
+                        <div class="stat-sub">in inventory</div>
+                    </div>
+                    <div class="stat-card red">
+                        <div class="stat-label">Total Utang</div>
+                        <div class="stat-value red" id="stat-utang">₱0</div>
+                        <div class="stat-sub" id="stat-debtors">0 customers</div>
+                    </div>
+                    <div class="stat-card blue">
+                        <div class="stat-label">Low Stock</div>
+                        <div class="stat-value blue" id="stat-lowstock">0</div>
+                        <div class="stat-sub">items need restock</div>
+                    </div>
+                </div>
+
+                <div class="grid-2">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">Recent Sales</span>
+                            <button class="btn btn-ghost btn-sm"
+                                onclick="showPage('sales', document.querySelector('[onclick*=sales]'))">View
+                                All</button>
+                        </div>
+                        <div class="card-body" style="padding:0">
+                            <table class="table" id="dashboard-sales-table">
+                                <thead>
+                                    <tr>
+                                        <th>Items</th>
+                                        <th>Type</th>
+                                        <th>Total</th>
+                                        <th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashboard-sales-body">
+                                    <tr>
+                                        <td colspan="4">
+                                            <div class="empty-state">
+                                                <p>No sales yet today</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title">⚠️ Low Stock Alert</span>
+                        </div>
+                        <div class="card-body" style="padding:0">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th>Stock</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="low-stock-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- POS PAGE                                          -->
+            <!-- ================================================ -->
+            <div id="page-pos" class="page fade-in">
+                <div class="pos-layout">
+                    <div class="pos-left">
+
+                        <!-- Mode toggle: Products / Bundles -->
+                        <div class="pos-mode-tabs">
+                            <button class="pos-mode-tab active" id="pos-tab-products"
+                                onclick="setPosMode('products')">🛍 Products</button>
+                            <button class="pos-mode-tab" id="pos-tab-bundles" onclick="setPosMode('bundles')">🎁
+                                Bundles</button>
+                        </div>
+
+                        <!-- Products view -->
+                        <div id="pos-products-view">
+                            <div class="search-box">
+                                <span class="search-icon">🔍</span>
+                                <input type="text" id="pos-search" placeholder="Hanapin ang produkto..."
+                                    oninput="filterPosProducts()">
+                            </div>
+                            <div class="filter-tabs" id="pos-category-tabs">
+                                <button class="filter-tab active" onclick="filterPosCategory('All', this)">All</button>
+                            </div>
+                            <div class="product-grid" id="pos-product-grid"></div>
+                        </div>
+
+                        <!-- Bundles view -->
+                        <div id="pos-bundles-view" style="display:none;">
+                            <div id="pos-bundle-grid"
+                                style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">
+                            </div>
+                            <div id="pos-bundle-empty" style="display:none;">
+                                <div class="empty-state">
+                                    <div class="icon">🎁</div>
+                                    <p>Walang bundles pa. Gumawa muna sa Bundle Pricing page.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="pos-right">
+                        <div class="cart-header">
+                            🛒 Cart <span id="cart-count"
+                                style="color:var(--muted);font-weight:400;font-size:13px"></span>
+                        </div>
+                        <div class="cart-items" id="cart-items">
+                            <div class="empty-state">
+                                <div class="icon">🛒</div>
+                                <p>Walang solud pa</p>
+                            </div>
+                        </div>
+                        <div class="cart-footer">
+                            <div class="cart-total-row">
+                                <span>Subtotal</span><span id="cart-subtotal">₱0.00</span>
+                            </div>
+                            <div id="cart-savings-row" class="cart-total-row"
+                                style="display:none;color:var(--green);font-weight:600">
+                                <span>🎁 Bundle Savings</span><span id="cart-savings">-₱0.00</span>
+                            </div>
+                            <div class="cart-grand-total">
+                                <span>TOTAL</span><span id="cart-total">₱0.00</span>
+                            </div>
+                            <div class="payment-toggle">
+                                <button class="pay-btn active" id="pay-cash" onclick="setPayType('cash')">💵
+                                    Cash</button>
+                                <button class="pay-btn" id="pay-credit" onclick="setPayType('credit')">📒 Utang</button>
+                            </div>
+                            <div id="credit-customer-select" style="display:none;margin-bottom:10px;">
+                                <select class="form-select" id="credit-customer-id" style="font-size:13px;">
+                                    <option value="">-- Piliin ang customer --</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;"
+                                onclick="checkout()">
+                                ✅ Bayad Na
+                            </button>
+                            <button class="btn btn-ghost btn-sm"
+                                style="width:100%;justify-content:center;margin-top:8px;" onclick="clearCart()">
+                                🗑 I-clear ang Cart
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- PRODUCTS PAGE                                     -->
+            <!-- ================================================ -->
+            <div id="page-products" class="page fade-in">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <div class="search-box" style="margin:0;flex:1;max-width:300px;">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="product-search" placeholder="Hanapin..." oninput="renderProducts()">
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddProduct()">+ Dagdag Produkto</button>
+                </div>
+                <div class="card">
+                    <div class="card-body" style="padding:0">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th>Stock</th>
+                                    <th>Retail</th>
+                                    <th>Wholesale</th>
+                                    <th>Min Qty</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="products-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- BUNDLE PRICING PAGE                               -->
+            <!-- ================================================ -->
+            <div id="page-bundles" class="page fade-in">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <div>
+                        <h3
+                            style="font-family:'Inter',sans-serif;font-weight:700;letter-spacing:-0.3px;font-size:18px;">
+                            Bundle Pricing</h3>
+                        <p style="font-size:13px;color:var(--muted);margin-top:2px;">Create special bundle deals —
+                            single-product multi-pack or mixed product bundles.</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddBundle()">+ Gumawa ng Bundle</button>
+                </div>
+
+                <!-- Bundle type legend -->
+                <div style="display:flex;gap:12px;margin-bottom:20px;">
+                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);">
+                        <span
+                            style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#DBEAFE;border:1px solid #BFDBFE;"></span>
+                        Single-product multi-pack (e.g., 5 Snow Bears for ₱4)
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);">
+                        <span
+                            style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#D1FAE5;border:1px solid #A7F3D0;"></span>
+                        Mixed-product combo (e.g., Coke + Chippy + Candy)
+                    </div>
+                </div>
+
+                <div id="bundles-list">
+                    <div class="empty-state">
+                        <div class="icon">🎁</div>
+                        <p>Wala pang bundle deals. Gumawa na!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- STOCK LOGS PAGE                                   -->
+            <!-- ================================================ -->
+            <div id="page-stocklogs" class="page fade-in">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h3 style="font-family:'Inter',sans-serif;font-weight:700;letter-spacing:-0.3px;">Stock Movement
+                    </h3>
+                    <button class="btn btn-primary" onclick="openStockLog()">+ Log Stock Change</button>
+                </div>
+                <div class="card">
+                    <div class="card-body" style="padding:0">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Change</th>
+                                    <th>Reason</th>
+                                    <th>Expiry</th>
+                                    <th>Notes</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stocklogs-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- SALES PAGE                                        -->
+            <!-- ================================================ -->
+            <div id="page-sales" class="page fade-in">
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">Sales History</span>
+                    </div>
+                    <div class="card-body" style="padding:0">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Items</th>
+                                    <th>Payment</th>
+                                    <th>Customer</th>
+                                    <th>Total</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sales-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- CREDITS PAGE                                      -->
+            <!-- ================================================ -->
+            <div id="page-credits" class="page fade-in">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h3 style="font-family:'Inter',sans-serif;font-weight:700;letter-spacing:-0.3px;">Utang Records</h3>
+                    <div style="display:flex;gap:8px;">
+                        <span id="total-utang-display"
+                            style="font-family:'Inter',sans-serif;font-size:20px;font-weight:800;letter-spacing:-0.5px;color:var(--red);align-self:center;"></span>
+                    </div>
+                </div>
+                <div id="credits-list"></div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- EXPENSES PAGE                                     -->
+            <!-- ================================================ -->
+            <div id="page-expenses" class="page fade-in">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h3 style="font-family:'Inter',sans-serif;font-weight:700;letter-spacing:-0.3px;">Mga Gastos</h3>
+                    <button class="btn btn-primary" onclick="openAddExpense()">+ Dagdag Gastos</button>
+                </div>
+                <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+                    <div class="stat-card red">
+                        <div class="stat-label">Total Expenses</div>
+                        <div class="stat-value red" id="exp-total">₱0</div>
+                    </div>
+                    <div class="stat-card yellow">
+                        <div class="stat-label">This Month</div>
+                        <div class="stat-value yellow" id="exp-month">₱0</div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="stat-label">Net (Sales - Expenses)</div>
+                        <div class="stat-value green" id="exp-net">₱0</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body" style="padding:0">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Amount</th>
+                                    <th>Notes</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expenses-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================ -->
+            <!-- CUSTOMERS PAGE                                    -->
+            <!-- ================================================ -->
+            <div id="page-customers" class="page fade-in">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                    <h3 style="font-family:'Inter',sans-serif;font-weight:700;letter-spacing:-0.3px;">Mga Customer</h3>
+                    <button class="btn btn-primary" onclick="openAddCustomer()">+ Dagdag Customer</button>
+                </div>
+                <div class="card">
+                    <div class="card-body" style="padding:0">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Contact</th>
+                                    <th>Address</th>
+                                    <th>Credit Limit</th>
+                                    <th>Utang</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customers-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /.content -->
+    </div><!-- /.main -->
+
+    <!-- ================================================ -->
+    <!-- MODALS                                           -->
+    <!-- ================================================ -->
+
+    <!-- Add / Edit Product Modal -->
+    <div class="modal-overlay" id="modal-product">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title" id="product-modal-title">Dagdag Produkto</span>
+                <button class="modal-close" onclick="closeModal('modal-product')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Product Name</label>
+                    <input type="text" class="form-input" id="p-name" placeholder="e.g. Snow Bear">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <select class="form-select" id="p-category">
+                            <option>Candy</option>
+                            <option>Drinks</option>
+                            <option>Snacks</option>
+                            <option>Condiments</option>
+                            <option>Personal Care</option>
+                            <option>Cigarettes</option>
+                            <option>Others</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Stock Qty</label>
+                        <input type="number" class="form-input" id="p-stock" value="50">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Retail Price (₱)</label>
+                        <input type="number" class="form-input" id="p-retail" step="0.01" value="1.00">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Wholesale Price (₱)</label>
+                        <input type="number" class="form-input" id="p-wholesale" step="0.01" value="0.65">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Min Qty for Wholesale</label>
+                    <input type="number" class="form-input" id="p-minqty" value="24">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-product')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveProduct()">💾 I-save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Log Modal -->
+    <div class="modal-overlay" id="modal-stock">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Log Stock Change</span>
+                <button class="modal-close" onclick="closeModal('modal-stock')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Product</label>
+                    <select class="form-select" id="sl-product"></select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Change Qty</label>
+                        <input type="number" class="form-input" id="sl-qty" placeholder="+50 or -10">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Reason</label>
+                        <select class="form-select" id="sl-reason">
+                            <option value="restock">Restock</option>
+                            <option value="damaged">Damaged</option>
+                            <option value="expired">Expired</option>
+                            <option value="adjustment">Adjustment</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" id="sl-expiry-group">
+                    <label class="form-label">Expiration Date (if restock)</label>
+                    <input type="date" class="form-input" id="sl-expiry">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <input type="text" class="form-input" id="sl-notes" placeholder="Optional notes...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-stock')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveStockLog()">💾 I-save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Customer Modal -->
+    <div class="modal-overlay" id="modal-customer">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Dagdag Customer</span>
+                <button class="modal-close" onclick="closeModal('modal-customer')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">First Name</label>
+                        <input type="text" class="form-input" id="c-fname" placeholder="Maria">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" class="form-input" id="c-lname" placeholder="Santos">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Contact Number</label>
+                    <input type="text" class="form-input" id="c-contact" placeholder="09XXXXXXXXX">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Barangay</label>
+                        <input type="text" class="form-input" id="c-brgy" placeholder="Brgy. San Jose">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Credit Limit (₱)</label>
+                        <input type="number" class="form-input" id="c-limit" value="1000">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-customer')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveCustomer()">💾 I-save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Expense Modal -->
+    <div class="modal-overlay" id="modal-expense">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Dagdag Gastos</span>
+                <button class="modal-close" onclick="closeModal('modal-expense')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <select class="form-select" id="e-category">
+                        <option>Kumpra</option>
+                        <option>Tubig</option>
+                        <option>Kuryente</option>
+                        <option>Transportasyon</option>
+                        <option>Mga Bayronon</option>
+                        <option>Uban Pa</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Amount (₱)</label>
+                    <input type="number" class="form-input" id="e-amount" step="0.01" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <input type="text" class="form-input" id="e-notes" placeholder="Detalye ng gastos...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-expense')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveExpense()">💾 I-save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div class="modal-overlay" id="modal-receipt">
+        <div class="modal" style="max-width:360px;">
+            <div class="modal-header">
+                <span class="modal-title">🧾 Resibo</span>
+                <button class="modal-close" onclick="closeModal('modal-receipt')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="receipt-content"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeModal('modal-receipt')">✓ Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bundle Add / Edit Modal -->
+    <div class="modal-overlay" id="modal-bundle">
+        <div class="modal" style="width:560px;max-width:95vw;">
+            <div class="modal-header">
+                <span class="modal-title" id="bundle-modal-title">🎁 Gumawa ng Bundle</span>
+                <button class="modal-close" onclick="closeModal('modal-bundle')">✕</button>
+            </div>
+            <div class="modal-body">
+                <!-- Bundle type selector -->
+                <div class="form-group">
+                    <label class="form-label">Bundle Type</label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <label style="cursor:pointer;">
+                            <input type="radio" name="bundle-type" value="single" id="btype-single"
+                                onchange="onBundleTypeChange()" checked style="display:none;">
+                            <div class="bundle-type-opt" id="btype-single-opt"
+                                onclick="document.getElementById('btype-single').checked=true;onBundleTypeChange()"
+                                style="border:2px solid var(--accent);background:var(--accent-light);border-radius:8px;padding:12px;text-align:center;cursor:pointer;">
+                                <div style="font-size:24px;margin-bottom:4px;">📦</div>
+                                <div style="font-size:12px;font-weight:700;color:var(--accent);">Single Product</div>
+                                <div style="font-size:11px;color:var(--muted);margin-top:2px;">Same product, bulk
+                                    price<br><em>e.g., 5 Snow Bears = ₱4</em></div>
+                            </div>
+                        </label>
+                        <label style="cursor:pointer;">
+                            <input type="radio" name="bundle-type" value="multi" id="btype-multi"
+                                onchange="onBundleTypeChange()" style="display:none;">
+                            <div class="bundle-type-opt" id="btype-multi-opt"
+                                onclick="document.getElementById('btype-multi').checked=true;onBundleTypeChange()"
+                                style="border:2px solid var(--border);background:white;border-radius:8px;padding:12px;text-align:center;cursor:pointer;">
+                                <div style="font-size:24px;margin-bottom:4px;">🎁</div>
+                                <div style="font-size:12px;font-weight:700;color:var(--muted);">Mixed Combo</div>
+                                <div style="font-size:11px;color:var(--muted);margin-top:2px;">Different products
+                                    combined<br><em>e.g., Coke + Chippy = ₱24</em></div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bundle Name</label>
+                    <input type="text" class="form-input" id="b-name"
+                        placeholder="e.g., Merienda Combo, 5-pc Candy Deal">
+                </div>
+
+                <!-- Single product section -->
+                <div id="b-single-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Product</label>
+                            <select class="form-select" id="b-single-product" onchange="updateBundleSavingsPreview()">
+                                <option value="">-- Pumili ng produkto --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Quantity in Bundle</label>
+                            <input type="number" class="form-input" id="b-single-qty" value="5" min="2"
+                                oninput="updateBundleSavingsPreview()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multi product section -->
+                <div id="b-multi-section" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Select Products for Combo</label>
+                        <div class="bundle-product-picker" id="b-product-picker"></div>
+                    </div>
+                    <div id="b-selected-chips-wrap" style="display:none;margin-bottom:4px;">
+                        <label class="form-label">Selected Items &amp; Quantities</label>
+                        <div id="b-selected-chips" class="bundle-selected-items"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Bundle Price (₱)</label>
+                    <input type="number" class="form-input" id="b-price" step="0.01" placeholder="e.g., 4.00"
+                        oninput="updateBundleSavingsPreview()">
+                    <div id="b-savings-preview"
+                        style="margin-top:6px;font-size:12px;color:var(--green);font-weight:600;min-height:16px;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-bundle')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveBundle()">💾 I-save ang Bundle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pay Utang Modal -->
+    <div class="modal-overlay" id="modal-pay-utang">
+        <div class="modal" style="max-width:380px;">
+            <div class="modal-header">
+                <span class="modal-title">💰 Bayad ng Utang</span>
+                <button class="modal-close" onclick="closeModal('modal-pay-utang')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="pay-utang-info" style="margin-bottom:16px;"></div>
+                <div class="form-group">
+                    <label class="form-label">Amount to Pay (₱)</label>
+                    <input type="number" class="form-input" id="pay-utang-amount" step="0.01" placeholder="0.00">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-pay-utang')">Cancel</button>
+                <button class="btn btn-success" onclick="processUtangPayment()">✅ Bayad</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST CONTAINER -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Scripts: data must load before app logic -->
+    <script src="data.js"></script>
+    <script src="script.js"></script>
+
+</body>
+
+</html>
