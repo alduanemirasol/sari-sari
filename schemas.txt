@@ -21,6 +21,13 @@ unit_conversions:
 - to_unit_id            FK to units.id
 - factor                multiply to convert, e.g., 1L → 1000ml, factor = 1000
 
+product_units:
+- id
+- product_id        FK to products.id
+- unit_id           FK to units.id
+- is_base_unit      true/false
+- conversion_to_base  e.g., 1000 (if this unit is L and base is ml)
+
 products:
 - id
 - name                  'Snow Bear'

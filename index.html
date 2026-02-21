@@ -746,6 +746,20 @@
     <script src="data.js"></script>
     <script src="script.js"></script>
 
+    <!-- Firebase SDK (ESM via <script type="module">) -->
+    <script type="module" src="firebase.js"></script>
+
+    <!-- Bootstrap Firebase after all scripts have parsed -->
+    <script type="module">
+        // initFirebase is defined in firebase.js and attached to window
+        // We wait for DOMContentLoaded so script.js globals (db, renderDashboard, etc.) exist
+        window.addEventListener("load", () => {
+            if (typeof window.initFirebase === "function") {
+                window.initFirebase();
+            }
+        });
+    </script>
+
 </body>
 
 </html>

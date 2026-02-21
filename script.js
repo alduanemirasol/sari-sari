@@ -437,12 +437,14 @@ function checkout() {
   const paymentTypeObj = db.payment_types.find(pt => pt.name === payType);
   const saleId = genId("sales");
   const saleDate = now();
-  db.sales.push({
+  const newSale = {
     id: saleId,
     customer_id: customerId,
     payment_type_id: paymentTypeObj.id,
     sale_date: saleDate,
-  });
+  };
+  db.sales.push(newSale);
+  if (typeof fbSet === "function") fbSet("sales", newSale);
 
   let total = 0;
   let receiptItems = [];
@@ -457,7 +459,7 @@ function checkout() {
     const lineTotal = unitPrice * item.quantity;
     total += lineTotal;
 
-    db.sale_items.push({
+    const newSaleItem = {
       id: genId("sale_items"),
       sale_id: saleId,
       product_id: item.product_id,
@@ -467,11 +469,13 @@ function checkout() {
       unit_price: unitPrice,       // snapshotted price
       total_price: lineTotal,
       sale_type: saleType,
-    });
+    };
+    db.sale_items.push(newSaleItem);
+    if (typeof fbSet === "function") fbSet("sale_items", newSaleItem);
 
     // Deduct stock + log it
     p.stock_quantity -= item.quantity;
-    db.stock_logs.push({
+    const newStockLog = {
       id: genId("stock_logs"),
       product_id: p.id,
       unit_id: p.unit_id,
@@ -480,7 +484,12 @@ function checkout() {
       reason: "sold",
       notes: `Sale #${saleId}`,
       created_at: dateStr,
-    });
+    };
+    db.stock_logs.push(newStockLog);
+    if (typeof fbSet === "function") {
+      fbSet("stock_logs", newStockLog);
+      fbUpdate("products", p.id, { stock_quantity: p.stock_quantity });
+    }
 
     receiptItems.push({ name: p.name, qty: item.quantity, price: unitPrice, total: lineTotal, isBundle: false });
   });
@@ -495,7 +504,7 @@ function checkout() {
 
     // One sale_item row represents the bundle sale
     const saleItemId = genId("sale_items");
-    db.sale_items.push({
+    const newBundleSaleItem = {
       id: saleItemId,
       sale_id: saleId,
       product_id: null,
@@ -505,7 +514,9 @@ function checkout() {
       unit_price: bundle.bundle_price,  // snapshotted bundle price
       total_price: lineTotal,
       sale_type: "bundle",
-    });
+    };
+    db.sale_items.push(newBundleSaleItem);
+    if (typeof fbSet === "function") fbSet("sale_items", newBundleSaleItem);
 
     // sale_bundle_items: individual product deductions for this bundle line
     bItems.forEach((bi) => {
@@ -513,18 +524,20 @@ function checkout() {
       if (!p) return;
       const totalQty = bi.quantity * cb.quantity;
 
-      db.sale_bundle_items.push({
+      const newSBI = {
         id: genId("sale_bundle_items"),
         sale_item_id: saleItemId,
         bundle_item_id: bi.id,
         product_id: bi.product_id,
         unit_id: bi.unit_id,
         quantity_deducted: totalQty,
-      });
+      };
+      db.sale_bundle_items.push(newSBI);
+      if (typeof fbSet === "function") fbSet("sale_bundle_items", newSBI);
 
       // Deduct stock + log
       p.stock_quantity -= totalQty;
-      db.stock_logs.push({
+      const newStockLog = {
         id: genId("stock_logs"),
         product_id: p.id,
         unit_id: p.unit_id,
@@ -533,7 +546,12 @@ function checkout() {
         reason: "sold",
         notes: `Bundle sale #${saleId} — ${bundle.bundle_name}`,
         created_at: dateStr,
-      });
+      };
+      db.stock_logs.push(newStockLog);
+      if (typeof fbSet === "function") {
+        fbSet("stock_logs", newStockLog);
+        fbUpdate("products", p.id, { stock_quantity: p.stock_quantity });
+      }
     });
 
     receiptItems.push({
@@ -551,14 +569,16 @@ function checkout() {
 
   // Create credit_transaction if credit sale
   if (payType === "credit") {
-    db.credit_transactions.push({
+    const newCT = {
       id: genId("credit_transactions"),
       customer_id: customerId,
       sale_id: saleId,
       amount_owed: total,
       due_date: "",
       created_at: dateStr,
-    });
+    };
+    db.credit_transactions.push(newCT);
+    if (typeof fbSet === "function") fbSet("credit_transactions", newCT);
   }
 
   showReceipt(receiptItems, total, payType, customerId, saleDate);
@@ -689,19 +709,22 @@ function saveProduct() {
       existingPricing.wholesale_min_qty !== wholesaleMinQty;
 
     if (priceChanged) {
-      db.product_pricing.push({
+      const newPricing = {
         id: genId("product_pricing"),
         product_id: editingProductId,
         retail_price: retailPrice,
         wholesale_price: wholesalePrice,
         wholesale_min_qty: wholesaleMinQty,
         effective_date: todayISO(),
-      });
+      };
+      db.product_pricing.push(newPricing);
+      if (typeof fbSet === "function") fbSet("product_pricing", newPricing);
     }
+    if (typeof fbSet === "function") fbSet("products", p);
     showToast("Na-update ang produkto!");
   } else {
     const newId = genId("products");
-    db.products.push({
+    const newProduct = {
       id: newId,
       name,
       product_category_id: catId,
@@ -709,16 +732,20 @@ function saveProduct() {
       stock_quantity: parseInt(document.getElementById("p-stock").value),
       image_url: getCategoryEmoji(catId),
       is_active: true,
-    });
+    };
+    db.products.push(newProduct);
+    if (typeof fbSet === "function") fbSet("products", newProduct);
     // Create initial pricing row
-    db.product_pricing.push({
+    const newPricing = {
       id: genId("product_pricing"),
       product_id: newId,
       retail_price: retailPrice,
       wholesale_price: wholesalePrice,
       wholesale_min_qty: wholesaleMinQty,
       effective_date: todayISO(),
-    });
+    };
+    db.product_pricing.push(newPricing);
+    if (typeof fbSet === "function") fbSet("product_pricing", newPricing);
     showToast("Nadagdag ang produkto!");
   }
 
@@ -730,7 +757,10 @@ function deleteProduct(id) {
   if (!confirm("Sigurado ka bang gusto mong i-delete?")) return;
   // Soft delete — preserve history
   const p = db.products.find(x => x.id === id);
-  if (p) p.is_active = false;
+  if (p) {
+    p.is_active = false;
+    if (typeof fbUpdate === "function") fbUpdate("products", id, { is_active: false });
+  }
   renderProducts();
   showToast("Na-delete ang produkto!", "warning");
 }
@@ -836,7 +866,10 @@ function deleteBundle(id) {
   if (!confirm("I-delete ang bundle na ito?")) return;
   // Soft delete
   const b = db.bundles.find(x => x.id === id);
-  if (b) b.is_active = false;
+  if (b) {
+    b.is_active = false;
+    if (typeof fbUpdate === "function") fbUpdate("bundles", id, { is_active: false });
+  }
   renderBundlesPage();
   showToast("Na-delete ang bundle!", "warning");
 }
@@ -972,18 +1005,25 @@ function saveBundle() {
     const b = db.bundles.find((x) => x.id === editingBundleId);
     b.bundle_name = name;
     b.bundle_price = price;
+    if (typeof fbUpdate === "function") fbUpdate("bundles", editingBundleId, { bundle_name: name, bundle_price: price });
 
     // Replace bundle_items rows for this bundle
     db.bundle_items = db.bundle_items.filter(bi => bi.bundle_id !== editingBundleId);
     newItems.forEach(item => {
-      db.bundle_items.push({ id: genId("bundle_items"), bundle_id: editingBundleId, ...item });
+      const bi = { id: genId("bundle_items"), bundle_id: editingBundleId, ...item };
+      db.bundle_items.push(bi);
+      if (typeof fbSet === "function") fbSet("bundle_items", bi);
     });
     showToast("Na-update ang bundle!");
   } else {
     const newBundleId = genId("bundles");
-    db.bundles.push({ id: newBundleId, bundle_name: name, bundle_price: price, is_active: true });
+    const newBundle = { id: newBundleId, bundle_name: name, bundle_price: price, is_active: true };
+    db.bundles.push(newBundle);
+    if (typeof fbSet === "function") fbSet("bundles", newBundle);
     newItems.forEach(item => {
-      db.bundle_items.push({ id: genId("bundle_items"), bundle_id: newBundleId, ...item });
+      const bi = { id: genId("bundle_items"), bundle_id: newBundleId, ...item };
+      db.bundle_items.push(bi);
+      if (typeof fbSet === "function") fbSet("bundle_items", bi);
     });
     showToast("Nadagdag ang bundle!");
   }
@@ -1062,7 +1102,7 @@ function saveStockLog() {
   let batchId = null;
   if (reason === "restocked" && change_qty > 0) {
     batchId = genId("stock_batches");
-    db.stock_batches.push({
+    const newBatch = {
       id: batchId,
       product_id,
       unit_id: p.unit_id,
@@ -1070,10 +1110,12 @@ function saveStockLog() {
       expiration_date: expiryDate || null,
       created_at: todayISO(),
       notes,
-    });
+    };
+    db.stock_batches.push(newBatch);
+    if (typeof fbSet === "function") fbSet("stock_batches", newBatch);
   }
 
-  db.stock_logs.push({
+  const newLog = {
     id: genId("stock_logs"),
     product_id,
     unit_id: p.unit_id,
@@ -1082,7 +1124,12 @@ function saveStockLog() {
     reason,
     notes,
     created_at: todayISO(),
-  });
+  };
+  db.stock_logs.push(newLog);
+  if (typeof fbSet === "function") {
+    fbSet("stock_logs", newLog);
+    fbUpdate("products", product_id, { stock_quantity: p.stock_quantity });
+  }
 
   closeModal("modal-stock");
   renderStockLogs();
@@ -1208,13 +1255,15 @@ function processUtangPayment() {
   const actualPaid = Math.min(amount, remaining);
 
   // Append-only: create a new credit_payment row
-  db.credit_payments.push({
+  const newPayment = {
     id: genId("credit_payments"),
     credit_transaction_id: ct.id,
     amount_paid: actualPaid,
     paid_at: todayISO(),
     notes: "",
-  });
+  };
+  db.credit_payments.push(newPayment);
+  if (typeof fbSet === "function") fbSet("credit_payments", newPayment);
 
   closeModal("modal-pay-utang");
   renderCredits();
@@ -1278,13 +1327,15 @@ function saveExpense() {
   const amount = parseFloat(document.getElementById("e-amount").value);
   if (!amount || amount <= 0) { showToast("Ilagay ang tamang amount!", "warning"); return; }
 
-  db.expenses.push({
+  const newExpense = {
     id: genId("expenses"),
     expense_category_id: cat ? cat.id : 1,
     amount,
     notes: document.getElementById("e-notes").value,
     created_at: todayISO(), // now uses created_at (was expense_date)
-  });
+  };
+  db.expenses.push(newExpense);
+  if (typeof fbSet === "function") fbSet("expenses", newExpense);
 
   closeModal("modal-expense");
   renderExpenses();
@@ -1330,7 +1381,7 @@ function saveCustomer() {
   const lname = document.getElementById("c-lname").value.trim();
   if (!fname || !lname) { showToast("Ilagay ang pangalan!", "warning"); return; }
 
-  db.customers.push({
+  const newCustomer = {
     id: genId("customers"),
     first_name: fname,
     middle_name: "",
@@ -1340,7 +1391,9 @@ function saveCustomer() {
     barangay: document.getElementById("c-brgy").value,
     street: "",
     credit_limit: parseFloat(document.getElementById("c-limit").value) || 1000,
-  });
+  };
+  db.customers.push(newCustomer);
+  if (typeof fbSet === "function") fbSet("customers", newCustomer);
 
   closeModal("modal-customer");
   renderCustomers();
@@ -1352,6 +1405,7 @@ function editCustomerLimit(id) {
   const newLimit = prompt(`Credit limit ni ${c.first_name} ${c.last_name}:`, c.credit_limit);
   if (newLimit !== null && !isNaN(parseFloat(newLimit))) {
     c.credit_limit = parseFloat(newLimit);
+    if (typeof fbUpdate === "function") fbUpdate("customers", id, { credit_limit: c.credit_limit });
     renderCustomers();
     showToast("Na-update ang credit limit!");
   }
