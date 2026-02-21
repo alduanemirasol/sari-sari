@@ -268,12 +268,15 @@ body {
 .stat-card.yellow::before {
   background: var(--accent);
 }
+
 .stat-card.green::before {
   background: var(--green);
 }
+
 .stat-card.red::before {
   background: var(--red);
 }
+
 .stat-card.blue::before {
   background: var(--blue);
 }
@@ -297,12 +300,15 @@ body {
 .stat-value.yellow {
   color: var(--accent);
 }
+
 .stat-value.green {
   color: var(--green);
 }
+
 .stat-value.red {
   color: var(--red);
 }
+
 .stat-value.blue {
   color: var(--blue);
 }
@@ -407,14 +413,17 @@ body {
   background: #d1fae5;
   color: #065f46;
 }
+
 .badge-yellow {
   background: #fef3c7;
   color: #92400e;
 }
+
 .badge-red {
   background: #fee2e2;
   color: #991b1b;
 }
+
 .badge-blue {
   background: #dbeafe;
   color: #1e40af;
@@ -715,6 +724,7 @@ body {
     transform: translateY(20px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -915,6 +925,7 @@ select.form-select {
     transform: translateX(20px);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
@@ -926,11 +937,13 @@ select.form-select {
   color: #065f46;
   border: 1px solid #a7f3d0;
 }
+
 .toast-warning {
   background: #fffbeb;
   color: #92400e;
   border: 1px solid #fde68a;
 }
+
 .toast-error {
   background: #fef2f2;
   color: #991b1b;
@@ -1091,9 +1104,11 @@ select.form-select {
 ::-webkit-scrollbar {
   width: 4px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 2px;
@@ -1110,6 +1125,7 @@ select.form-select {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -1385,17 +1401,20 @@ select.form-select {
   color: var(--text);
   margin-bottom: 2px;
 }
+
 .bundle-pos-items {
   font-size: 10px;
   color: var(--muted);
   margin-bottom: 6px;
   line-height: 1.4;
 }
+
 .bundle-pos-price {
   font-size: 16px;
   font-weight: 800;
   color: var(--accent);
 }
+
 .bundle-pos-savings {
   font-size: 10px;
   color: var(--green);
