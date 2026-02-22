@@ -53,7 +53,11 @@
             </div>
         </nav>
         <div class="sidebar-footer">
-            v2.0 · Demo Mode
+            v2.0 · <span style="color:#94a3b8">localStorage</span>
+            <br>
+            <button onclick="confirmResetDb()"
+                style="margin-top:8px;background:none;border:1px solid #334155;color:#94a3b8;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:inherit;">🔄
+                Reset Demo Data</button>
         </div>
     </div>
 
@@ -165,7 +169,7 @@
                         <div id="pos-products-view">
                             <div class="search-box">
                                 <span class="search-icon">🔍</span>
-                                <input type="text" id="pos-search" placeholder="Hanapin ang produkto..."
+                                <input type="text" id="pos-search" placeholder="Search product..."
                                     oninput="filterPosProducts()">
                             </div>
                             <div class="filter-tabs" id="pos-category-tabs">
@@ -197,7 +201,7 @@
                         <div class="cart-items" id="cart-items">
                             <div class="empty-state">
                                 <div class="icon">🛒</div>
-                                <p>Walang solud pa</p>
+                                <p>Walay solud</p>
                             </div>
                         </div>
                         <div class="cart-footer">
@@ -223,11 +227,11 @@
                             </div>
                             <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;"
                                 onclick="checkout()">
-                                ✅ Bayad Na
+                                ✅ Bayad
                             </button>
                             <button class="btn btn-ghost btn-sm"
                                 style="width:100%;justify-content:center;margin-top:8px;" onclick="clearCart()">
-                                🗑 I-clear ang Cart
+                                🗑 Clear Cart
                             </button>
                         </div>
                     </div>
@@ -243,7 +247,7 @@
                         <span class="search-icon">🔍</span>
                         <input type="text" id="product-search" placeholder="Hanapin..." oninput="renderProducts()">
                     </div>
-                    <button class="btn btn-primary" onclick="openAddProduct()">+ Dagdag Produkto</button>
+                    <button class="btn btn-primary" onclick="openAddProduct()">+ Add Product</button>
                 </div>
                 <div class="card">
                     <div class="card-body" style="padding:0">
@@ -277,7 +281,7 @@
                         <p style="font-size:13px;color:var(--muted);margin-top:2px;">Create special bundle deals —
                             single-product multi-pack or mixed product bundles.</p>
                     </div>
-                    <button class="btn btn-primary" onclick="openAddBundle()">+ Gumawa ng Bundle</button>
+                    <button class="btn btn-primary" onclick="openAddBundle()">+ Create Bundle</button>
                 </div>
 
                 <!-- Bundle type legend -->
@@ -377,7 +381,7 @@
             <div id="page-expenses" class="page fade-in">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                     <h3 style="font-family:'Inter',sans-serif;font-weight:700;letter-spacing:-0.3px;">Mga Gastos</h3>
-                    <button class="btn btn-primary" onclick="openAddExpense()">+ Dagdag Gastos</button>
+                    <button class="btn btn-primary" onclick="openAddExpense()">+ Add Expenses</button>
                 </div>
                 <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
                     <div class="stat-card red">
@@ -416,7 +420,7 @@
             <div id="page-customers" class="page fade-in">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
                     <h3 style="font-family:'Inter',sans-serif;font-weight:700;letter-spacing:-0.3px;">Mga Customer</h3>
-                    <button class="btn btn-primary" onclick="openAddCustomer()">+ Dagdag Customer</button>
+                    <button class="btn btn-primary" onclick="openAddCustomer()">+ Add Customer</button>
                 </div>
                 <div class="card">
                     <div class="card-body" style="padding:0">
@@ -448,7 +452,7 @@
     <div class="modal-overlay" id="modal-product">
         <div class="modal">
             <div class="modal-header">
-                <span class="modal-title" id="product-modal-title">Dagdag Produkto</span>
+                <span class="modal-title" id="product-modal-title">Add Product</span>
                 <button class="modal-close" onclick="closeModal('modal-product')">✕</button>
             </div>
             <div class="modal-body">
@@ -557,7 +561,7 @@
     <div class="modal-overlay" id="modal-customer">
         <div class="modal">
             <div class="modal-header">
-                <span class="modal-title">Dagdag Customer</span>
+                <span class="modal-title">Add Customer</span>
                 <button class="modal-close" onclick="closeModal('modal-customer')">✕</button>
             </div>
             <div class="modal-body">
@@ -597,7 +601,7 @@
     <div class="modal-overlay" id="modal-expense">
         <div class="modal">
             <div class="modal-header">
-                <span class="modal-title">Dagdag Gastos</span>
+                <span class="modal-title">Add Expenses</span>
                 <button class="modal-close" onclick="closeModal('modal-expense')">✕</button>
             </div>
             <div class="modal-body">
@@ -648,7 +652,7 @@
     <div class="modal-overlay" id="modal-bundle">
         <div class="modal" style="width:560px;max-width:95vw;">
             <div class="modal-header">
-                <span class="modal-title" id="bundle-modal-title">🎁 Gumawa ng Bundle</span>
+                <span class="modal-title" id="bundle-modal-title">🎁 Create Bundle</span>
                 <button class="modal-close" onclick="closeModal('modal-bundle')">✕</button>
             </div>
             <div class="modal-body">

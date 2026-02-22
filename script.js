@@ -478,7 +478,7 @@ function renderCart() {
 
   if (cart.length === 0 && cartBundles.length === 0) {
     el.innerHTML =
-      '<div class="empty-state"><div class="icon">🛒</div><p>Walang solud pa</p></div>';
+      '<div class="empty-state"><div class="icon">🛒</div><p>Walay solud</p></div>';
     countEl.textContent = "";
     document.getElementById("cart-subtotal").textContent = "₱0.00";
     document.getElementById("cart-total").textContent = "₱0.00";
@@ -809,6 +809,7 @@ function checkout() {
     });
   }
 
+  saveDb();
   showReceipt(receiptItems, total, payType, customerId, saleDate);
 
   cart = [];
@@ -906,8 +907,7 @@ function renderProducts() {
 
 function openAddProduct() {
   editingProductId = null;
-  document.getElementById("product-modal-title").textContent =
-    "Dagdag Produkto";
+  document.getElementById("product-modal-title").textContent = "Add Product";
   document.getElementById("p-name").value = "";
   document.getElementById("p-stock").value = "50";
   document.getElementById("p-retail").value = "1.00";
@@ -1040,6 +1040,7 @@ function saveProduct() {
     showToast("Nadagdag ang produkto!");
   }
 
+  saveDb();
   closeModal("modal-product");
   renderProducts();
 }
@@ -1049,6 +1050,7 @@ function deleteProduct(id) {
   // Soft delete — preserve history
   const p = db.products.find((x) => x.id === id);
   if (p) p.is_active = false;
+  saveDb();
   renderProducts();
   showToast("Na-delete ang produkto!", "warning");
 }
@@ -1199,7 +1201,7 @@ function openAddBundle() {
   editingBundleId = null;
   bundleSelectedItems = {};
   document.getElementById("bundle-modal-title").textContent =
-    "🎁 Gumawa ng Bundle";
+    "🎁 Create Bundle";
   document.getElementById("b-name").value = "";
   document.getElementById("b-price").value = "";
   document.getElementById("b-savings-preview").textContent = "";
@@ -1251,6 +1253,7 @@ function deleteBundle(id) {
   // Soft delete
   const b = db.bundles.find((x) => x.id === id);
   if (b) b.is_active = false;
+  saveDb();
   renderBundlesPage();
   showToast("Na-delete ang bundle!", "warning");
 }
@@ -1478,6 +1481,7 @@ function saveBundle() {
     showToast("Nadagdag ang bundle!");
   }
 
+  saveDb();
   closeModal("modal-bundle");
   renderBundlesPage();
 }
@@ -1582,6 +1586,7 @@ function saveStockLog() {
     notes,
     created_at: todayISO(),
   });
+  saveDb();
 
   closeModal("modal-stock");
   renderStockLogs();
@@ -1915,6 +1920,7 @@ function processUtangPayment() {
     paid_at: todayISO(),
     notes: "",
   });
+  saveDb();
 
   closeModal("modal-pay-utang");
   renderCredits();
@@ -2000,6 +2006,7 @@ function saveExpense() {
     notes: document.getElementById("e-notes").value,
     created_at: todayISO(), // now uses created_at (was expense_date)
   });
+  saveDb();
 
   closeModal("modal-expense");
   renderExpenses();
@@ -2063,6 +2070,7 @@ function saveCustomer() {
     street: "",
     credit_limit: parseFloat(document.getElementById("c-limit").value) || 1000,
   });
+  saveDb();
 
   closeModal("modal-customer");
   renderCustomers();
@@ -2077,9 +2085,22 @@ function editCustomerLimit(id) {
   );
   if (newLimit !== null && !isNaN(parseFloat(newLimit))) {
     c.credit_limit = parseFloat(newLimit);
+    saveDb();
     renderCustomers();
     showToast("Na-update ang credit limit!");
   }
+}
+
+// ============================================================
+// RESET / PERSISTENCE HELPERS
+// ============================================================
+function confirmResetDb() {
+  if (
+    !confirm("I-reset ang lahat ng data sa demo data? Hindi na mababawi ito!")
+  )
+    return;
+  resetDb();
+  location.reload();
 }
 
 // ============================================================
