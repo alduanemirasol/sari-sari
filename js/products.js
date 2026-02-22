@@ -46,16 +46,77 @@ function renderProducts() {
     .join("");
 }
 
+// ── Unit-aware form helpers ────────────────────────────────────────────────
+
+/**
+ * Config per unit_id: step size, stock placeholder, hint text, and
+ * whether to show a "convert from larger unit" helper (e.g. enter kg → shows g).
+ */
+const UNIT_CONFIG = {
+  1: {
+    abbr: "pc",
+    step: 1,
+    placeholder: "50",
+    hint: "Number of individual pieces in stock.",
+  },
+  2: {
+    abbr: "L",
+    step: 0.5,
+    placeholder: "10",
+    hint: "Total liters in stock. Use decimals for partial liters (e.g. 2.5 L).",
+  },
+  3: {
+    abbr: "ml",
+    step: 100,
+    placeholder: "5000",
+    hint: "Total milliliters in stock (e.g. 5 × 1L bottles = 5000 ml).",
+  },
+  4: {
+    abbr: "kg",
+    step: 0.5,
+    placeholder: "10",
+    hint: "Total kilograms in stock. Use decimals for grams (e.g. 1.5 kg).",
+  },
+  5: {
+    abbr: "g",
+    step: 50,
+    placeholder: "1000",
+    hint: "Total grams in stock (e.g. 1 kg bag = 1000 g).",
+  },
+};
+
+function onProductUnitChange() {
+  const unitId = parseInt(document.getElementById("p-unit").value) || 1;
+  const cfg = UNIT_CONFIG[unitId] || UNIT_CONFIG[1];
+
+  // Update label, badge, step, placeholder and hint
+  document.getElementById("p-stock-label").textContent =
+    `Stock Qty (${cfg.abbr})`;
+  document.getElementById("p-stock-unit-badge").textContent = cfg.abbr;
+  document.getElementById("p-stock").step = cfg.step;
+  document.getElementById("p-stock").placeholder = cfg.placeholder;
+  document.getElementById("p-stock-hint").textContent = cfg.hint;
+
+  // Show a retail price label hint tailored to the unit
+  const priceHint = document.getElementById("p-retail-hint");
+  if (priceHint) {
+    priceHint.textContent =
+      unitId === 1 ? "Price per piece." : `Price per 1 ${cfg.abbr}.`;
+  }
+}
+
 function openAddProduct() {
   editingProductId = null;
   document.getElementById("product-modal-title").textContent = "Add Product";
   document.getElementById("p-name").value = "";
+  document.getElementById("p-unit").value = "1"; // default: piece
   document.getElementById("p-stock").value = "50";
   document.getElementById("p-retail").value = "1.00";
   document.getElementById("p-wholesale").value = "0.65";
   document.getElementById("p-minqty").value = "24";
   document.getElementById("p-wholesale-enabled").checked = false;
   toggleWholesaleSection();
+  onProductUnitChange(); // sync labels
   renderProductUnitRows([]);
   openModal("modal-product");
 }
@@ -76,6 +137,8 @@ function editProduct(id) {
     "I-edit ang Produkto";
   document.getElementById("p-name").value = p.name;
   document.getElementById("p-category").value = p.product_category_id;
+  document.getElementById("p-unit").value = p.unit_id || 1;
+  onProductUnitChange(); // sync labels to the loaded unit
   document.getElementById("p-stock").value = p.stock_quantity;
   document.getElementById("p-retail").value = pricing
     ? pricing.retail_price
@@ -106,6 +169,7 @@ function saveProduct() {
   }
 
   const catId = parseInt(document.getElementById("p-category").value);
+  const unitId = parseInt(document.getElementById("p-unit").value) || 1;
   const retailPrice = parseFloat(document.getElementById("p-retail").value);
   const wholesaleEnabled = document.getElementById(
     "p-wholesale-enabled",
@@ -121,6 +185,7 @@ function saveProduct() {
     const p = db.products.find((x) => x.id === editingProductId);
     p.name = name;
     p.product_category_id = catId;
+    p.unit_id = unitId;
     p.stock_quantity = parseInt(document.getElementById("p-stock").value);
     p.image_url = getCategoryEmoji(catId);
 
@@ -168,7 +233,7 @@ function saveProduct() {
       id: newId,
       name,
       product_category_id: catId,
-      unit_id: 1, // default: piece
+      unit_id: unitId,
       stock_quantity: parseInt(document.getElementById("p-stock").value),
       image_url: getCategoryEmoji(catId),
       is_active: true,

@@ -482,13 +482,39 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Stock Qty</label>
-                        <input type="number" class="form-input" id="p-stock" value="50">
+                        <label class="form-label">Base Unit</label>
+                        <select class="form-select" id="p-unit" onchange="onProductUnitChange()">
+                            <option value="1">Piece (pc)</option>
+                            <option value="2">Liter (L)</option>
+                            <option value="3">Milliliter (ml)</option>
+                            <option value="4">Kilogram (kg)</option>
+                            <option value="5">Gram (g)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Stock qty row — label and hint update based on selected unit -->
+                <div class="form-row" style="align-items:flex-end;">
+                    <div class="form-group" style="flex:1;">
+                        <label class="form-label" id="p-stock-label">Stock Qty</label>
+                        <div style="position:relative;">
+                            <input type="number" class="form-input" id="p-stock" value="50" step="1"
+                                style="padding-right:48px;">
+                            <span id="p-stock-unit-badge"
+                                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:700;color:var(--muted);pointer-events:none;">pc</span>
+                        </div>
+                        <div id="p-stock-hint" style="font-size:11px;color:var(--muted);margin-top:3px;">Number of
+                            individual pieces in stock.</div>
+                    </div>
+                    <div class="form-group" style="flex:1;" id="p-stock-secondary-wrap" style="display:none;">
+                        <!-- populated by onProductUnitChange() for weight/volume units -->
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Retail Price (₱)</label>
                     <input type="number" class="form-input" id="p-retail" step="0.01" value="1.00">
+                    <div id="p-retail-hint" style="font-size:11px;color:var(--muted);margin-top:3px;">Price per piece.
+                    </div>
                 </div>
                 <div class="form-group" style="margin-bottom:8px;">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
