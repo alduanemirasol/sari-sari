@@ -14,7 +14,15 @@ const DEFAULT_DB = {
     { id: 4, name: "Condiments" },
     { id: 5, name: "Personal Care" },
     { id: 6, name: "Cigarettes" },
-    { id: 7, name: "Others" },
+    { id: 7, name: "Rice & Grains" },
+    { id: 8, name: "Cooking Oil" },
+    { id: 9, name: "Canned Goods" },
+    { id: 10, name: "Noodles & Pasta" },
+    { id: 11, name: "Beverages (Coffee/Tea)" },
+    { id: 12, name: "Frozen Foods" },
+    { id: 13, name: "Cleaning Supplies" },
+    { id: 14, name: "Household Essentials" },
+    { id: 15, name: "Others" },
   ],
   expense_categories: [
     { id: 1, name: "Kumpra" },
@@ -119,6 +127,16 @@ const DEFAULT_DB = {
       wholesale_price: 48.0,
       wholesale_min_qty: 3,
       label: "Per Pack (pk)",
+    },
+    // Sinandomeng Rice — sold per kg (fractional allowed)
+    {
+      id: 9,
+      product_id: 34,
+      unit_id: 4,
+      retail_price: 52.0,
+      wholesale_price: 48.0,
+      wholesale_min_qty: 25,
+      label: "Per kg",
     },
   ],
   products: [
@@ -402,7 +420,7 @@ const DEFAULT_DB = {
     {
       id: 31,
       name: "Disposable Lighter",
-      product_category_id: 7,
+      product_category_id: 15,
       unit_id: 1,
       stock_quantity: 15,
       image_url: "🔥",
@@ -411,7 +429,7 @@ const DEFAULT_DB = {
     {
       id: 32,
       name: "Ballpen (black)",
-      product_category_id: 7,
+      product_category_id: 15,
       unit_id: 1,
       stock_quantity: 25,
       image_url: "✏️",
@@ -420,10 +438,20 @@ const DEFAULT_DB = {
     {
       id: 33,
       name: "Candle (small)",
-      product_category_id: 7,
+      product_category_id: 15,
       unit_id: 1,
       stock_quantity: 50,
       image_url: "🕯️",
+      is_active: true,
+    },
+    // Rice & Grains — tracked in kg, sold per kg (fractional)
+    {
+      id: 34,
+      name: "Sinandomeng Rice",
+      product_category_id: 7,
+      unit_id: 4,
+      stock_quantity: 50,
+      image_url: "🍚",
       is_active: true,
     },
   ],
@@ -707,6 +735,15 @@ const DEFAULT_DB = {
       wholesale_price: 16.0,
       wholesale_min_qty: 24,
       effective_date: "2025-02-15",
+    },
+    // Sinandomeng Rice — per kg
+    {
+      id: 35,
+      product_id: 34,
+      retail_price: 52.0,
+      wholesale_price: 48.0,
+      wholesale_min_qty: 25,
+      effective_date: "2025-01-01",
     },
   ],
   bundles: [
@@ -1760,8 +1797,8 @@ const DEFAULT_DB = {
     },
   ],
   nextId: {
-    products: 34,
-    product_pricing: 35,
+    products: 35,
+    product_pricing: 36,
     customers: 7,
     sales: 16,
     sale_items: 28,
@@ -1774,6 +1811,6 @@ const DEFAULT_DB = {
     bundles: 8,
     bundle_items: 17,
     units: 7,
-    product_units: 9,
+    product_units: 10,
   },
 };

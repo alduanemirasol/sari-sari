@@ -88,17 +88,24 @@ function renderPosGrid() {
           ? `<div style="font-size:10px;color:var(--red);margin-top:2px;">⚠️ ${p.stock_quantity} left</div>`
           : "";
       const retailPrice = pricing ? pricing.retail_price : 0;
+      const baseUnit = db.units.find((u) => u.id === p.unit_id);
+      const stockLabel = baseUnit ? baseUnit.abbreviation : "pc";
       const multiUnitBadge = hasMultiUnits
         ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 Multi-unit</div>`
         : "";
+      // For continuous-unit products with no multi-unit options, show a scale badge
+      const scaleBadge =
+        !hasMultiUnits && isContinuousUnit(p.unit_id)
+          ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">⚖️ By weight/vol</div>`
+          : "";
       return `
     <div class="product-card ${selected}" onclick="addToCart(${p.id})">
-      <div class="product-qty-badge">${qty}</div>
+      <div class="product-qty-badge">${qty > 0 ? fmtQty(qty, p.unit_id) : 0}</div>
       <div class="product-emoji">${p.image_url}</div>
       <div class="product-name">${p.name}</div>
-      <div class="product-price">${fmt(retailPrice)}</div>
-      <div class="product-stock">${p.stock_quantity} pcs</div>
-      ${multiUnitBadge}
+      <div class="product-price">${fmt(retailPrice)}${isContinuousUnit(p.unit_id) ? `<span style="font-size:10px;color:var(--muted)">/${stockLabel}</span>` : ""}</div>
+      <div class="product-stock">${p.stock_quantity} ${stockLabel}</div>
+      ${multiUnitBadge}${scaleBadge}
       ${stockBadge}
     </div>`;
     })
@@ -169,42 +176,64 @@ function addToCart(product_id) {
     return;
   }
 
-  // Check if product has multiple unit options
+  // Always open the unit picker for:
+  //   (a) products with multiple selling units, OR
+  //   (b) products whose base unit is continuous (kg, g, L, ml)
   const unitOptions = getProductUnitOptions(product_id);
-  if (unitOptions.length > 0) {
-    // Show unit picker modal
+  if (unitOptions.length > 0 || isContinuousUnit(product.unit_id)) {
     openUnitPickerModal(product_id);
     return;
   }
 
-  // Default: add with product's default unit
-  addToCartWithUnit(product_id, product.unit_id);
+  // Discrete default unit — add 1 directly
+  addToCartWithUnit(product_id, product.unit_id, 1);
 }
 
-function addToCartWithUnit(product_id, unit_id) {
+function addToCartWithUnit(product_id, unit_id, quantity) {
   const product = db.products.find((p) => p.id === product_id);
   if (!product) return;
+
+  // quantity defaults to 1 for discrete units
+  if (quantity === undefined || quantity === null) quantity = 1;
+  quantity = parseFloat(quantity);
+  if (isNaN(quantity) || quantity <= 0) {
+    showToast("Ilagay ang tamang quantity!", "warning");
+    return;
+  }
+
+  // Stock check: convert sold unit → base unit before comparing
+  const baseQty = convertToBaseUnits(quantity, unit_id, product.unit_id);
   if (product.stock_quantity <= 0) {
     showToast("Wala nang stock!", "error");
     return;
   }
 
-  // Cart key is product_id + unit_id combination
+  // How much base-unit stock is already in the cart for this product (all units)?
+  const baseAlreadyInCart = cart
+    .filter((c) => c.product_id === product_id)
+    .reduce(
+      (sum, c) =>
+        sum + convertToBaseUnits(c.quantity, c.unit_id, product.unit_id),
+      0,
+    );
+
+  if (baseAlreadyInCart + baseQty > product.stock_quantity) {
+    showToast("Hindi sapat ang stock!", "warning");
+    return;
+  }
+
   const existing = cart.find(
     (c) => c.product_id === product_id && c.unit_id === unit_id,
   );
   if (existing) {
-    if (existing.quantity >= product.stock_quantity) {
-      showToast("Hindi na dagdag, ubos na stock!", "warning");
-      return;
-    }
-    existing.quantity++;
+    existing.quantity = parseFloat((existing.quantity + quantity).toFixed(4));
   } else {
-    cart.push({ product_id, unit_id, quantity: 1 });
+    cart.push({ product_id, unit_id, quantity });
   }
   closeModal("modal-unit-picker");
   renderPosGrid();
   renderCart();
+  maybeExpandMobileCart();
 }
 
 function openUnitPickerModal(product_id) {
@@ -223,8 +252,81 @@ function openUnitPickerModal(product_id) {
       <div style="font-size:12px;color:var(--muted)">Stock: ${product.stock_quantity} ${defaultUnit ? defaultUnit.abbreviation : "pc"}</div>
     </div>`;
 
-  // Build option buttons: default unit (from product_pricing) + additional units (from product_units)
+  // Build option buttons/inputs: default unit (from product_pricing) + additional units (from product_units)
   let optionsHtml = "";
+
+  // Helper: build a single unit option block
+  // For continuous units → quantity input field + Add button
+  // For discrete units   → single tap button (existing behaviour)
+  function buildUnitOption(
+    unit_id,
+    label,
+    abbrv,
+    pricing,
+    pricingObj,
+    cartQty,
+  ) {
+    const isCont = isContinuousUnit(unit_id);
+    const wsEnabled =
+      pricingObj &&
+      pricingObj.wholesale_price > 0 &&
+      pricingObj.wholesale_min_qty > 0;
+    const wsInfo = wsEnabled
+      ? ` · Wholesale: ${fmt(pricingObj.wholesale_price)} (${pricingObj.wholesale_min_qty}+)`
+      : "";
+    const inCartLine =
+      cartQty > 0
+        ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${fmtQty(cartQty, unit_id)} in cart</div>`
+        : "";
+
+    if (isCont) {
+      const step = unitStep(unit_id);
+      const inputId = `upi-qty-${unit_id}`;
+      return `
+      <div class="unit-picker-opt ${cartQty > 0 ? "selected" : ""}" style="cursor:default;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div>
+            <div style="font-weight:700">${label} <span style="font-size:11px;color:var(--muted)">(${abbrv})</span></div>
+            <div style="font-size:12px;color:var(--muted)">Retail: ${fmt(pricing)}${wsInfo}</div>
+          </div>
+          <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(pricing)}<span style="font-size:11px;color:var(--muted)">/${abbrv}</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="qty-btn" onclick="
+            var el=document.getElementById('${inputId}');
+            var v=parseFloat(el.value)||0;
+            el.value=Math.max(${step}, parseFloat((v-${step}).toFixed(4)));
+          ">−</button>
+          <input type="number" id="${inputId}" min="${step}" step="${step}" value="${step}"
+            style="width:80px;text-align:center;font-size:16px;font-weight:700;border:2px solid var(--border);border-radius:8px;padding:6px 4px;outline:none;"
+            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+          <span style="font-size:13px;color:var(--muted);font-weight:600;">${abbrv}</span>
+          <button type="button" class="qty-btn" onclick="
+            var el=document.getElementById('${inputId}');
+            var v=parseFloat(el.value)||0;
+            el.value=parseFloat((v+${step}).toFixed(4));
+          ">+</button>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto;white-space:nowrap;"
+            onclick="addToCartWithUnit(${product_id}, ${unit_id}, parseFloat(document.getElementById('${inputId}').value))">
+            + I-add
+          </button>
+        </div>
+        ${inCartLine}
+      </div>`;
+    } else {
+      return `
+      <button class="unit-picker-opt ${cartQty > 0 ? "selected" : ""}" onclick="addToCartWithUnit(${product_id}, ${unit_id}, 1)">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-weight:700">${label} <span style="font-size:11px;color:var(--muted)">(${abbrv})</span></div>
+            <div style="font-size:12px;color:var(--muted)">Retail: ${fmt(pricing)}${wsInfo}</div>
+          </div>
+          <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(pricing)}</div>
+        </div>
+        ${inCartLine}
+      </button>`;
+    }
+  }
 
   // Default unit option (from product_pricing)
   if (defaultPricing) {
@@ -232,39 +334,32 @@ function openUnitPickerModal(product_id) {
       (c) => c.product_id === product_id && c.unit_id === product.unit_id,
     );
     const inCart = cartItem ? cartItem.quantity : 0;
-    optionsHtml += `
-    <button class="unit-picker-opt ${inCart > 0 ? "selected" : ""}" onclick="addToCartWithUnit(${product_id}, ${product.unit_id})">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div style="font-weight:700">${defaultUnit ? defaultUnit.name : "piece"} <span style="font-size:11px;color:var(--muted)">(${defaultUnit ? defaultUnit.abbreviation : "pc"})</span></div>
-          <div style="font-size:12px;color:var(--muted)">Retail: ${fmt(defaultPricing.retail_price)} · Wholesale: ${fmt(defaultPricing.wholesale_price)} (${defaultPricing.wholesale_min_qty}+)</div>
-        </div>
-        <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(defaultPricing.retail_price)}</div>
-      </div>
-      ${inCart > 0 ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${inCart} in cart</div>` : ""}
-    </button>`;
+    optionsHtml += buildUnitOption(
+      product.unit_id,
+      defaultUnit ? defaultUnit.name : "piece",
+      defaultUnit ? defaultUnit.abbreviation : "pc",
+      defaultPricing.retail_price,
+      defaultPricing,
+      inCart,
+    );
   }
 
-  // Additional unit options
+  // Additional unit options (from product_units)
   unitOptions.forEach((pu) => {
-    if (pu.unit_id === product.unit_id) return; // skip if same as default (already shown)
+    if (pu.unit_id === product.unit_id) return; // already shown as default
     const unit = db.units.find((u) => u.id === pu.unit_id);
     const cartItem = cart.find(
       (c) => c.product_id === product_id && c.unit_id === pu.unit_id,
     );
     const inCart = cartItem ? cartItem.quantity : 0;
-    const label = pu.label || (unit ? unit.name : "unit");
-    optionsHtml += `
-    <button class="unit-picker-opt ${inCart > 0 ? "selected" : ""}" onclick="addToCartWithUnit(${product_id}, ${pu.unit_id})">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div style="font-weight:700">${label}</div>
-          <div style="font-size:12px;color:var(--muted)">Retail: ${fmt(pu.retail_price)} · Wholesale: ${fmt(pu.wholesale_price)} (${pu.wholesale_min_qty}+)</div>
-        </div>
-        <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(pu.retail_price)}</div>
-      </div>
-      ${inCart > 0 ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${inCart} in cart</div>` : ""}
-    </button>`;
+    optionsHtml += buildUnitOption(
+      pu.unit_id,
+      pu.label || (unit ? unit.name : "unit"),
+      unit ? unit.abbreviation : "?",
+      pu.retail_price,
+      pu,
+      inCart,
+    );
   });
 
   document.getElementById("unit-picker-options").innerHTML = optionsHtml;
@@ -307,8 +402,34 @@ function changeCartQty(product_id, unit_id, delta) {
     (c) => c.product_id === product_id && c.unit_id === unit_id,
   );
   if (idx === -1) return;
-  cart[idx].quantity += delta;
-  if (cart[idx].quantity <= 0) cart.splice(idx, 1);
+
+  // For continuous units use the natural step; discrete units use the passed delta (±1)
+  const step = isContinuousUnit(unit_id)
+    ? unitStep(unit_id) * Math.sign(delta)
+    : delta;
+  const newQty = parseFloat((cart[idx].quantity + step).toFixed(4));
+
+  if (newQty <= 0) {
+    cart.splice(idx, 1);
+  } else {
+    // Stock guard: ensure we don't exceed available stock in base units
+    const product = db.products.find((p) => p.id === product_id);
+    if (product) {
+      const baseAlreadyInCart = cart
+        .filter((c) => c.product_id === product_id && c.unit_id !== unit_id)
+        .reduce(
+          (sum, c) =>
+            sum + convertToBaseUnits(c.quantity, c.unit_id, product.unit_id),
+          0,
+        );
+      const newBaseQty = convertToBaseUnits(newQty, unit_id, product.unit_id);
+      if (newBaseQty + baseAlreadyInCart > product.stock_quantity) {
+        showToast("Hindi na dagdag, ubos na stock!", "warning");
+        return;
+      }
+    }
+    cart[idx].quantity = newQty;
+  }
   renderPosGrid();
   renderCart();
 }
@@ -335,46 +456,36 @@ function renderCart() {
     const p = db.products.find((x) => x.id === item.product_id);
     if (!p) return;
 
-    // Determine pricing: check product_units first, fall back to product_pricing
-    let unitPrice, saleTypeLabel;
-    const puPricing = getProductUnitPricing(p.id, item.unit_id);
+    // Pricing — respects wholesale-enabled flag via shared helper
+    const { unitPrice, saleType } = resolveUnitPrice(
+      p.id,
+      item.unit_id,
+      item.quantity,
+    );
     const unit = db.units.find((u) => u.id === item.unit_id);
     const unitLabel = unit ? `(${unit.abbreviation})` : "";
-
-    if (puPricing) {
-      unitPrice =
-        item.quantity >= puPricing.wholesale_min_qty
-          ? puPricing.wholesale_price
-          : puPricing.retail_price;
-      saleTypeLabel =
-        item.quantity >= puPricing.wholesale_min_qty
-          ? ' <span class="tag">Wholesale</span>'
-          : "";
-    } else {
-      const pricing = getProductPricing(p.id);
-      if (!pricing) return;
-      unitPrice =
-        item.quantity >= pricing.wholesale_min_qty
-          ? pricing.wholesale_price
-          : pricing.retail_price;
-      saleTypeLabel =
-        item.quantity >= pricing.wholesale_min_qty
-          ? ' <span class="tag">Wholesale</span>'
-          : "";
-    }
+    const saleTypeLabel =
+      saleType === "wholesale" ? ' <span class="tag">Wholesale</span>' : "";
 
     const lineTotal = unitPrice * item.quantity;
     subtotal += lineTotal;
+
+    // Format quantity display: "1.5 kg" for continuous, plain "3" for discrete
+    const qtyDisplay = fmtQty(item.quantity, item.unit_id);
+    const priceLabel = isContinuousUnit(item.unit_id)
+      ? `${fmt(unitPrice)}/${unit ? unit.abbreviation : ""} × ${qtyDisplay} = ${fmt(lineTotal)}`
+      : `${fmt(unitPrice)} × ${qtyDisplay} = ${fmt(lineTotal)}`;
+
     html += `
     <div class="cart-item">
       <div class="cart-item-emoji">${p.image_url}</div>
       <div class="cart-item-info">
         <div class="cart-item-name">${p.name} <span style="font-size:11px;color:var(--muted)">${unitLabel}</span>${saleTypeLabel}</div>
-        <div class="cart-item-price">${fmt(unitPrice)} × ${item.quantity} = ${fmt(lineTotal)}</div>
+        <div class="cart-item-price">${priceLabel}</div>
       </div>
       <div class="cart-item-controls">
         <button class="qty-btn" onclick="changeCartQty(${p.id},${item.unit_id},-1)">−</button>
-        <span class="qty-display">${item.quantity}</span>
+        <span class="qty-display">${qtyDisplay}</span>
         <button class="qty-btn" onclick="changeCartQty(${p.id},${item.unit_id},1)">+</button>
       </div>
     </div>`;
@@ -474,12 +585,9 @@ function checkout() {
 
     let orderTotal = cart.reduce((sum, item) => {
       const p = db.products.find((x) => x.id === item.product_id);
-      const pricing = getProductPricing(p.id);
-      const up =
-        item.quantity >= pricing.wholesale_min_qty
-          ? pricing.wholesale_price
-          : pricing.retail_price;
-      return sum + up * item.quantity;
+      if (!p) return sum;
+      const { unitPrice } = resolveUnitPrice(p.id, item.unit_id, item.quantity);
+      return sum + unitPrice * item.quantity;
     }, 0);
     orderTotal += cartBundles.reduce((sum, cb) => {
       const b = db.bundles.find((x) => x.id === cb.bundle_id);
@@ -514,26 +622,13 @@ function checkout() {
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
 
-    // Resolve pricing: product_units first, then product_pricing
-    const puPricing = getProductUnitPricing(p.id, item.unit_id);
-    let unitPrice, saleType;
-    if (puPricing) {
-      unitPrice =
-        item.quantity >= puPricing.wholesale_min_qty
-          ? puPricing.wholesale_price
-          : puPricing.retail_price;
-      saleType =
-        item.quantity >= puPricing.wholesale_min_qty ? "wholesale" : "retail";
-    } else {
-      const pricing = getProductPricingAt(p.id, dateStr);
-      unitPrice =
-        item.quantity >= pricing.wholesale_min_qty
-          ? pricing.wholesale_price
-          : pricing.retail_price;
-      saleType =
-        item.quantity >= pricing.wholesale_min_qty ? "wholesale" : "retail";
-    }
-
+    // Resolve pricing — respects wholesale-enabled flag, uses price snapshot at sale date
+    const { unitPrice, saleType } = resolveUnitPrice(
+      p.id,
+      item.unit_id,
+      item.quantity,
+      dateStr,
+    );
     const lineTotal = unitPrice * item.quantity;
     total += lineTotal;
 
@@ -549,14 +644,17 @@ function checkout() {
       sale_type: saleType,
     });
 
-    // Deduct stock + log it
-    p.stock_quantity -= item.quantity;
+    // Convert sold qty → product's base unit before deducting stock
+    // e.g. selling 1.5 kg of rice deducts 1.5 from stock_quantity (tracked in kg)
+    // e.g. selling 1 L of Toyo deducts 1000 from stock if stock is tracked in ml
+    const baseQty = convertToBaseUnits(item.quantity, item.unit_id, p.unit_id);
+    p.stock_quantity = parseFloat((p.stock_quantity - baseQty).toFixed(4));
     db.stock_logs.push({
       id: genId("stock_logs"),
       product_id: p.id,
       unit_id: item.unit_id,
       stock_batch_id: null,
-      change_qty: -item.quantity,
+      change_qty: -item.quantity, // log in sold unit for readability
       reason: "sold",
       notes: `Sale #${saleId}`,
       created_at: dateStr,
@@ -564,8 +662,9 @@ function checkout() {
 
     const unit = db.units.find((u) => u.id === item.unit_id);
     receiptItems.push({
-      name: p.name + (unit ? ` (${unit.abbreviation})` : ""),
+      name: p.name + (unit && unit.id !== 1 ? ` (${unit.abbreviation})` : ""),
       qty: item.quantity,
+      qtyDisplay: fmtQty(item.quantity, item.unit_id),
       price: unitPrice,
       total: lineTotal,
       isBundle: false,
@@ -677,7 +776,8 @@ function showReceipt(items, total, payType, customerId, date) {
     <hr class="receipt-divider">`;
 
   items.forEach((i) => {
-    html += `<div class="receipt-row"><span>${i.isBundle ? "🎁 " : ""}${i.name} x${i.qty}</span><span>${fmt(i.total)}</span></div>`;
+    const qtyStr = i.qtyDisplay !== undefined ? i.qtyDisplay : `x${i.qty}`;
+    html += `<div class="receipt-row"><span>${i.isBundle ? "🎁 " : ""}${i.name} ${i.isBundle ? "x" + i.qty : qtyStr}</span><span>${fmt(i.total)}</span></div>`;
     if (i.isBundle && i.bundleItems) {
       i.bundleItems.forEach((bi) => {
         html += `<div class="receipt-row" style="padding-left:12px;font-size:11px;color:#777"><span>↳ ${bi}</span></div>`;

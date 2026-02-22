@@ -35,8 +35,8 @@ function renderProducts() {
     <td><span class="badge badge-blue">${catName}</span></td>
     <td>${stockBadge}</td>
     <td style="color:var(--accent)">${pricing ? fmt(pricing.retail_price) : "—"}</td>
-    <td style="color:var(--muted)">${pricing ? fmt(pricing.wholesale_price) : "—"}</td>
-    <td style="color:var(--muted)">${pricing ? pricing.wholesale_min_qty + "+" : "—"}</td>
+    <td style="color:var(--muted)">${pricing && pricing.wholesale_price > 0 ? fmt(pricing.wholesale_price) : "—"}</td>
+    <td style="color:var(--muted)">${pricing && pricing.wholesale_price > 0 && pricing.wholesale_min_qty > 0 ? pricing.wholesale_min_qty + "+" : "—"}</td>
     <td>
       <button class="btn btn-ghost btn-sm" onclick="editProduct(${p.id})">✏️</button>
       <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">🗑</button>
@@ -54,8 +54,17 @@ function openAddProduct() {
   document.getElementById("p-retail").value = "1.00";
   document.getElementById("p-wholesale").value = "0.65";
   document.getElementById("p-minqty").value = "24";
+  document.getElementById("p-wholesale-enabled").checked = false;
+  toggleWholesaleSection();
   renderProductUnitRows([]);
   openModal("modal-product");
+}
+
+function toggleWholesaleSection() {
+  const enabled = document.getElementById("p-wholesale-enabled").checked;
+  document.getElementById("p-wholesale-section").style.display = enabled
+    ? "block"
+    : "none";
 }
 
 function editProduct(id) {
@@ -77,6 +86,12 @@ function editProduct(id) {
   document.getElementById("p-minqty").value = pricing
     ? pricing.wholesale_min_qty
     : "";
+
+  // Check wholesale enabled if product has a non-zero wholesale price
+  const hasWholesale = pricing && pricing.wholesale_price > 0;
+  document.getElementById("p-wholesale-enabled").checked = hasWholesale;
+  toggleWholesaleSection();
+
   // Load existing unit rows
   const existingUnits = getProductUnitOptions(id);
   renderProductUnitRows(existingUnits);
@@ -92,10 +107,15 @@ function saveProduct() {
 
   const catId = parseInt(document.getElementById("p-category").value);
   const retailPrice = parseFloat(document.getElementById("p-retail").value);
-  const wholesalePrice = parseFloat(
-    document.getElementById("p-wholesale").value,
-  );
-  const wholesaleMinQty = parseInt(document.getElementById("p-minqty").value);
+  const wholesaleEnabled = document.getElementById(
+    "p-wholesale-enabled",
+  ).checked;
+  const wholesalePrice = wholesaleEnabled
+    ? parseFloat(document.getElementById("p-wholesale").value) || 0
+    : 0;
+  const wholesaleMinQty = wholesaleEnabled
+    ? parseInt(document.getElementById("p-minqty").value) || 0
+    : 0;
 
   if (editingProductId) {
     const p = db.products.find((x) => x.id === editingProductId);
