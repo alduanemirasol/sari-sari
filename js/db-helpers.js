@@ -117,15 +117,26 @@ function fmtQty(qty, unit_id) {
   return u && u.id !== 1 && u.id !== 6 ? `${numStr} ${u.abbreviation}` : numStr;
 }
 
+/** Get the product-specific package conversion for a product, if it exists. */
+function getProductPackageConversion(product_id) {
+  if (!db.product_package_conversions) return null;
+  return (
+    db.product_package_conversions.find((c) => c.product_id === product_id) ||
+    null
+  );
+}
+
 /**
- * Resolve the correct unit price for a cart item, correctly gating wholesale
- * behind the "wholesale enabled" check (wholesale_price > 0 && min_qty > 0).
- * Checks product_units first, falls back to product_pricing.
- * Pass dateStr (ISO) for historical snapshot pricing; null = latest.
+ * Resolve the correct unit price for a cart item.
+ * Resolution order:
+ *   1. product_units row for this product+unit  (explicit per-unit pricing)
+ *   2. product_package_conversions              (pack sold at pieces_per_pack × base price)
+ *   3. product_pricing                          (base/piece price — fallback)
  *
  * @returns {{ unitPrice: number, saleType: 'retail'|'wholesale' }}
  */
 function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
+  // 1. Explicit product_units pricing
   const puPricing = getProductUnitPricing(product_id, unit_id);
   if (puPricing) {
     const wsEnabled =
@@ -137,6 +148,34 @@ function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
     };
   }
 
+  // 2. Pack pricing via product_package_conversions
+  //    e.g. 1 pack = 30 pieces @ ₱1.5/pc → pack price = ₱45
+  const pkgConv = getProductPackageConversion(product_id);
+  if (pkgConv && unit_id === pkgConv.pack_unit_id) {
+    const basePricing = dateStr
+      ? getProductPricingAt(product_id, dateStr)
+      : getProductPricing(product_id);
+    if (basePricing) {
+      const packRetail = basePricing.retail_price * pkgConv.pieces_per_pack;
+      const packWholesale =
+        basePricing.wholesale_price > 0
+          ? basePricing.wholesale_price * pkgConv.pieces_per_pack
+          : 0;
+      const wsEnabled =
+        basePricing.wholesale_price > 0 && basePricing.wholesale_min_qty > 0;
+      // Wholesale threshold for packs: convert min_qty (pieces) → packs
+      const wsMinPacks = wsEnabled
+        ? Math.ceil(basePricing.wholesale_min_qty / pkgConv.pieces_per_pack)
+        : 0;
+      const isWS = wsEnabled && quantity >= wsMinPacks;
+      return {
+        unitPrice: isWS ? packWholesale : packRetail,
+        saleType: isWS ? "wholesale" : "retail",
+      };
+    }
+  }
+
+  // 3. Base / piece price fallback
   const pricing = dateStr
     ? getProductPricingAt(product_id, dateStr)
     : getProductPricing(product_id);
@@ -152,24 +191,12 @@ function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
 }
 
 /**
- * Get the product-specific package conversion for a product, if it exists.
- * Returns the product_package_conversions row or null.
- */
-function getProductPackageConversion(product_id) {
-  if (!db.product_package_conversions) return null;
-  return (
-    db.product_package_conversions.find((c) => c.product_id === product_id) ||
-    null
-  );
-}
-
-/**
  * Convert a quantity from sold_unit_id into the product's base unit_id.
  * Resolution order:
  *   1. Same unit → no-op
- *   2. product_package_conversions (product-specific pack→piece, e.g. 1 pack = 30 pc)
- *   3. Global unit_conversions table (physical: 1L = 1000ml, 1kg = 1000g)
- *   4. No path found → assume 1:1 and warn
+ *   2. product_package_conversions (product-specific pack↔piece)
+ *   3. Global unit_conversions (L↔ml, kg↔g)
+ *   4. No path found → 1:1 with warning
  */
 function convertToBaseUnits(quantity, sold_unit_id, base_unit_id, product_id) {
   if (sold_unit_id === base_unit_id) return quantity;
@@ -178,19 +205,17 @@ function convertToBaseUnits(quantity, sold_unit_id, base_unit_id, product_id) {
   if (product_id != null) {
     const pkgConv = getProductPackageConversion(product_id);
     if (pkgConv) {
-      // pack → base (pieces)
       if (
         sold_unit_id === pkgConv.pack_unit_id &&
         base_unit_id === pkgConv.base_unit_id
       ) {
-        return quantity * pkgConv.pieces_per_pack;
+        return quantity * pkgConv.pieces_per_pack; // pack → pieces
       }
-      // base (pieces) → pack  (used when checking cart totals against stock)
       if (
         sold_unit_id === pkgConv.base_unit_id &&
         base_unit_id === pkgConv.pack_unit_id
       ) {
-        return quantity / pkgConv.pieces_per_pack;
+        return quantity / pkgConv.pieces_per_pack; // pieces → pack
       }
     }
   }
@@ -207,7 +232,7 @@ function convertToBaseUnits(quantity, sold_unit_id, base_unit_id, product_id) {
   if (inverse) return quantity / inverse.factor;
 
   console.warn(
-    `tindahan: no unit_conversion found from unit_id ${sold_unit_id} → ${base_unit_id} for product ${product_id}. Assuming 1:1.`,
+    `tindahan: no conversion from unit_id ${sold_unit_id} → ${base_unit_id} for product ${product_id}. Assuming 1:1.`,
   );
   return quantity;
 }

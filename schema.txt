@@ -17,6 +17,7 @@ units:
 
 unit_conversions:
 - id
+- product_id  FK to products.id (nullable)
 - from_unit_id          FK to units.id
 - to_unit_id            FK to units.id
 - factor                multiply to convert, e.g., 1L → 1000ml, factor = 1000
@@ -75,6 +76,8 @@ stock_batches:
 - expiration_date       '03-01-26' (null if product has no expiry)
 - created_at            '02-19-25 8:00AM'
 - notes                 'Delivery from Supplier A'
+- quantity_received
+- quantity_base
 
 stock_logs:
 - id

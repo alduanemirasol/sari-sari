@@ -1,0 +1,156 @@
+product_categories:
+  id: 1
+  name: Snacks
+
+expense_categories:
+  id: 1
+  name: Expenses
+
+payment_types:
+  id: 1
+  name: cash (cash, credit)
+
+sale_types:
+  id: 1
+  name: retail (retail, wholesale)
+
+units:
+  id: 1
+  name: liter
+  abbreviation: L
+
+unit_conversions:
+  id: 1
+  product_id: FK to products.id
+  from_unit_id: FK to units.id
+  to_unit_id: FK to units.id
+  factor: Multiply to convert. e.g. 1L → 1000ml, factor = 1000
+
+stock_log_reasons:
+  id: 1
+  name: restocked, sold, damaged, expired, adjustment
+
+products:
+  id: 1
+  name: Snow Bear
+  unit_id: FK to units.id
+  product_category_id: FK to product_categories.id
+  stock_quantity: 50
+  image_url:
+  is_active: Soft delete flag. true = active
+  created_at:
+  updated_at:
+
+product_pricing:
+  id: 1
+  product_id: FK to products.id
+  unit_id: FK to units.id
+  label: Display label in POS unit picker. e.g. Per Liter (L). Null for base unit
+  retail_price: 1.00
+  wholesale_price: 48.00
+  wholesale_min_qty: 50
+  effective_date: 2025-02-19
+
+bundles:
+  id: 1
+  bundle_name: 3 Candies for 5 pesos
+  bundle_price: 5.00
+  is_active: true
+  created_at:
+  updated_at:
+
+bundle_items:
+  id: 1
+  bundle_id: FK to bundles.id
+  product_id: FK to products.id
+  unit_id: FK to units.id
+  quantity:
+
+stock_batches:
+  id:
+  product_id: FK to products.id
+  unit_id: FK to units.id
+  quantity_received:
+  expiration_date:
+  created_at:
+  notes:
+  updated_at:
+
+stock_logs:
+  id:
+  product_id: FK to products.id
+  unit_id: FK to units.id
+  stock_batch_id: FK to stock_batches.id
+  stock_log_reason_id: FK to stock_log_reasons.id
+  change_qty:
+  notes:
+  created_at:
+
+customers:
+  id:
+  first_name:
+  middle_name:
+  last_name:
+  contact_number:
+  municipality:
+  barangay:
+  street:
+  credit_limit:
+  created_at:
+  updated_at:
+
+sales:
+  id:
+  customer_id: FK to customers.id
+  payment_type_id: FK to payment_types.id
+  sale_date:
+  subtotal:
+  discount:
+  total_amount:
+  created_at:
+
+sale_items:
+  id:
+  sale_id: FK to sales.id
+  product_id: FK to products.id
+  unit_id: FK to units.id
+  quantity_sold:
+  unit_price:
+  sale_type: retail or wholesale
+
+sale_bundles:
+  id:
+  sale_id: FK to sales.id
+  bundle_id: FK to bundles.id
+  quantity_sold:
+  unit_price:
+
+sale_bundle_items:
+  id:
+  sale_bundle_id: FK to sale_bundles.id
+  bundle_item_id: FK to bundle_items.id
+  quantity_deducted:
+
+credit:
+  id:
+  customer_id: FK to customers.id
+  sale_id: FK to sales.id
+  amount_owed:
+  due_date:
+  created_at:
+
+credit_payments:
+  id:
+  credit_transaction_id: FK to credit.id
+  amount_paid:
+  paid_at:
+  notes:
+
+expenses:
+  id:
+  expense_category_id: FK to expense_categories.id
+  amount:
+  notes:
+  image_url:
+  created_at:
+  expense_date:

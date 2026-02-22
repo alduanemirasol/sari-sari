@@ -90,7 +90,6 @@ function renderPosGrid() {
       const retailPrice = pricing ? pricing.retail_price : 0;
       const baseUnit = db.units.find((u) => u.id === p.unit_id);
       const stockLabel = baseUnit ? baseUnit.abbreviation : "pc";
-      const pkgConvPos = getProductPackageConversion(p.id);
       const multiUnitBadge = hasMultiUnits
         ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 Multi-unit</div>`
         : "";
@@ -99,11 +98,6 @@ function renderPosGrid() {
         !hasMultiUnits && isContinuousUnit(p.unit_id)
           ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">⚖️ By weight/vol</div>`
           : "";
-      // Pack conversion badge
-      const packBadge =
-        pkgConvPos && !hasMultiUnits
-          ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 pc or pk</div>`
-          : "";
       return `
     <div class="product-card ${selected}" onclick="addToCart(${p.id})">
       <div class="product-qty-badge">${qty > 0 ? fmtQty(qty, p.unit_id) : 0}</div>
@@ -111,7 +105,7 @@ function renderPosGrid() {
       <div class="product-name">${p.name}</div>
       <div class="product-price">${fmt(retailPrice)}${isContinuousUnit(p.unit_id) ? `<span style="font-size:10px;color:var(--muted)">/${stockLabel}</span>` : ""}</div>
       <div class="product-stock">${p.stock_quantity} ${stockLabel}</div>
-      ${multiUnitBadge}${scaleBadge}${packBadge}
+      ${multiUnitBadge}${scaleBadge}
       ${stockBadge}
     </div>`;
     })
@@ -184,15 +178,9 @@ function addToCart(product_id) {
 
   // Always open the unit picker for:
   //   (a) products with multiple selling units, OR
-  //   (b) products whose base unit is continuous (kg, g, L, ml), OR
-  //   (c) products that have a package conversion (can sell by piece OR pack)
+  //   (b) products whose base unit is continuous (kg, g, L, ml)
   const unitOptions = getProductUnitOptions(product_id);
-  const hasPkgConv = !!getProductPackageConversion(product_id);
-  if (
-    unitOptions.length > 0 ||
-    isContinuousUnit(product.unit_id) ||
-    hasPkgConv
-  ) {
+  if (unitOptions.length > 0 || isContinuousUnit(product.unit_id)) {
     openUnitPickerModal(product_id);
     return;
   }
@@ -379,48 +367,6 @@ function openUnitPickerModal(product_id) {
       inCart,
     );
   });
-
-  // Pack option from product_package_conversions (if not already in product_units)
-  const pkgConv = getProductPackageConversion(product_id);
-  if (pkgConv) {
-    const packAlreadyInUnits = unitOptions.some(
-      (pu) => pu.unit_id === pkgConv.pack_unit_id,
-    );
-    if (!packAlreadyInUnits) {
-      const packUnit = db.units.find((u) => u.id === pkgConv.pack_unit_id);
-      const packCartItem = cart.find(
-        (c) =>
-          c.product_id === product_id && c.unit_id === pkgConv.pack_unit_id,
-      );
-      const packInCart = packCartItem ? packCartItem.quantity : 0;
-
-      // Derive a per-pack retail price from the base unit price * pieces_per_pack
-      const baseRetailPrice = defaultPricing ? defaultPricing.retail_price : 0;
-      const packRetailPrice = baseRetailPrice * pkgConv.pieces_per_pack;
-
-      // Build a synthetic pricing object so buildUnitOption can show it
-      const packPricingObj = {
-        retail_price: packRetailPrice,
-        wholesale_price: 0,
-        wholesale_min_qty: 0,
-      };
-
-      optionsHtml += `
-      <button class="unit-picker-opt ${packInCart > 0 ? "selected" : ""}"
-        onclick="addToCartWithUnit(${product_id}, ${pkgConv.pack_unit_id}, 1)">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div style="font-weight:700;">Pack <span style="font-size:11px;color:var(--muted)">(${packUnit ? packUnit.abbreviation : "pk"})</span>
-              <span style="font-size:10px;background:var(--accent-light);color:var(--accent);border-radius:4px;padding:1px 5px;margin-left:4px;">${pkgConv.pieces_per_pack} pc/pk</span>
-            </div>
-            <div style="font-size:12px;color:var(--muted);">Retail: ${fmt(packRetailPrice)} per pack</div>
-          </div>
-          <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(packRetailPrice)}</div>
-        </div>
-        ${packInCart > 0 ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${packInCart} pk in cart</div>` : ""}
-      </button>`;
-    }
-  }
 
   document.getElementById("unit-picker-options").innerHTML = optionsHtml;
   openModal("modal-unit-picker");
