@@ -164,6 +164,160 @@
         #page-auditlogs .card {
             margin-top: 0;
         }
+
+        /* ── Google Drive Sync Panel ── */
+        .gdrive-panel {
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+            color: #fff;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin: 12px 0 4px;
+            box-shadow: 0 2px 10px rgba(26, 115, 232, .25);
+        }
+
+        .gdrive-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .gdrive-panel-header .gdrive-logo {
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        #gdrive-status {
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            opacity: .9;
+            margin-bottom: 8px;
+        }
+
+        .gdrive-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .gdrive-dot-green {
+            background: #34d399;
+        }
+
+        .gdrive-dot-grey {
+            background: #94a3b8;
+        }
+
+        #gdrive-last-sync {
+            font-size: 10px;
+            opacity: .75;
+            margin-bottom: 8px;
+        }
+
+        .gdrive-btn-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .gdrive-btn {
+            background: rgba(255, 255, 255, .15);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, .3);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background .15s;
+            text-align: left;
+        }
+
+        .gdrive-btn:hover {
+            background: rgba(255, 255, 255, .25);
+        }
+
+        .gdrive-btn:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+        .gdrive-btn-danger {
+            background: rgba(239, 68, 68, .3);
+            border-color: rgba(239, 68, 68, .4);
+        }
+
+        .gdrive-btn-danger:hover {
+            background: rgba(239, 68, 68, .45);
+        }
+
+        #gdrive-sync-indicator {
+            display: none;
+            align-items: center;
+            gap: 5px;
+            font-size: 10px;
+            opacity: .85;
+            margin-top: 4px;
+        }
+
+        .gdrive-spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 255, 255, .3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: gdrive-spin .7s linear infinite;
+        }
+
+        @keyframes gdrive-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ── GDrive Backup List Modal ── */
+        .gdrive-backup-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .gdrive-backup-row:last-child {
+            border-bottom: none;
+        }
+
+        /* ── Image Upload Widget ── */
+        .gdrive-image-upload-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, .12);
+            border: 1px dashed rgba(255, 255, 255, .4);
+            border-radius: 6px;
+            padding: 7px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #fff;
+            cursor: pointer;
+            transition: background .15s;
+        }
+
+        .gdrive-image-upload-label:hover {
+            background: rgba(255, 255, 255, .22);
+        }
+
+        .gdrive-image-upload-label input[type=file] {
+            display: none;
+        }
     </style>
 </head>
 
@@ -212,8 +366,34 @@
             <div class="nav-item" data-page="auditlogs" onclick="showPage('auditlogs', this)"><span
                     class="icon">📜</span> Audit Log</div>
         </nav>
-        <div class="sidebar-footer">
-            v3.0 · <span style="color:#94a3b8">localStorage</span><br>
+        <!-- Google Drive Sync Panel -->
+        <div class="gdrive-panel">
+            <div class="gdrive-panel-header">
+                <span class="gdrive-logo">☁️</span> Drive Backup
+            </div>
+            <div id="gdrive-status"><span class="gdrive-dot gdrive-dot-grey"></span> Not connected</div>
+            <div id="gdrive-last-sync">Last sync: Never</div>
+            <div id="gdrive-sync-indicator">
+                <div class="gdrive-spinner"></div> Syncing…
+            </div>
+            <div class="gdrive-btn-row">
+                <button class="gdrive-btn" id="gdrive-btn-connect" onclick="gdriveSignIn()">🔑 Connect Google
+                    Drive</button>
+                <button class="gdrive-btn" id="gdrive-btn-sync-now" onclick="gdriveSyncNow()" style="display:none">☁️
+                    Sync Now</button>
+                <button class="gdrive-btn" id="gdrive-btn-backups" onclick="gdriveOpenBackupsModal()"
+                    style="display:none">📂 View Backups</button>
+                <label class="gdrive-image-upload-label" id="gdrive-btn-upload-img" style="display:none">
+                    🖼️ Upload Image
+                    <input type="file" accept="image/*" onchange="gdriveHandleImageUpload(this)">
+                </label>
+                <button class="gdrive-btn gdrive-btn-danger" id="gdrive-btn-disconnect" onclick="gdriveSignOut()"
+                    style="display:none">✕ Disconnect</button>
+            </div>
+        </div>
+
+        <div class="sidebar-footer" style="margin-top:4px;">
+            v3.0 · <span style="color:#94a3b8">localStorage + Drive</span><br>
             <button onclick="confirmResetDb()"
                 style="margin-top:8px;background:none;border:1px solid #334155;color:#94a3b8;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:inherit;">🔄
                 Reset Demo Data</button>
@@ -974,10 +1154,39 @@
         </div>
     </div>
 
+
+    <!-- Google Drive Backups Modal -->
+    <div class="modal-overlay" id="modal-gdrive-backups">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <span class="modal-title">☁️ Google Drive Backups</span>
+                <button class="modal-close" onclick="closeModal('modal-gdrive-backups')">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">
+                    Ang mga backup na ito ay naka-store sa iyong Google Drive sa folder na
+                    <strong>TindahanBackups</strong>.
+                    Maaari mong i-restore ang kahit anong backup sa ibaba.
+                </p>
+                <div id="gdrive-backup-list">
+                    <div style="text-align:center;padding:20px;color:var(--muted);">⏳ Loading…</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-gdrive-backups')">Close</button>
+                <button class="btn btn-primary" onclick="gdriveSyncNow().then(()=>gdriveOpenBackupsModal())">☁️ Sync
+                    &amp; Refresh</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST CONTAINER -->
     <div class="toast-container" id="toast-container"></div>
 
     <!-- Scripts — order matters -->
+    <!-- Google APIs: gapi (Drive REST) + Google Identity Services (OAuth 2.0) -->
+    <script src="https://apis.google.com/js/api.js" onload="window.dispatchEvent(new Event('gapi-ready'))"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="js/db-seed.js"></script>
     <script src="js/db-store.js"></script>
     <script src="js/db-helpers.js"></script>
@@ -995,6 +1204,7 @@
     <script src="js/customers.js"></script>
     <script src="js/users.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/gdrive-sync.js"></script>
 </body>
 
 </html>
