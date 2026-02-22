@@ -1,6 +1,7 @@
 ================================================================================
-  IMPROVED POS & MANAGEMENT SYSTEM SCHEMA (Single-User)
-  Changes from original are marked with [NEW] or [CHANGED]
+  IMPROVED POS & MANAGEMENT SYSTEM SCHEMA (Multi-User + RBAC)
+  Builds on previous single-user schema.
+  Changes/additions marked with [NEW] or [CHANGED]
 ================================================================================
 
 --------------------------------------------------------------------------------
@@ -39,34 +40,182 @@ stock_log_reasons:
   id
   name                        e.g. restocked, sold, damaged, expired, adjustment, returned
 
-[NEW] sale_statuses:
+sale_statuses:
   id
   name                        e.g. completed, voided, held
-  -- Replaces free-text status on sales. Allows held/parked transactions.
 
-[NEW] return_reasons:
+return_reasons:
   id
   name                        e.g. defective, wrong_item, customer_changed_mind, expired
 
 --------------------------------------------------------------------------------
-SESSIONS / SHIFTS
+AUTHENTICATION & USERS  [NEW SECTION]
 --------------------------------------------------------------------------------
 
-[NEW] sessions:
+[NEW] roles:
   id
+  name                        e.g. owner, manager, cashier, inventory_clerk, viewer
+  description                 Short explanation of what this role can do
+  is_active                   Soft delete
+  created_at
+  updated_at
+
+  -- Seed roles (suggested defaults):
+  --   1  owner             Full access. Can manage users, roles, financials, everything.
+  --   2  manager           Access to reports, inventory, sales. Cannot manage users/roles.
+  --   3  cashier           POS sales only. No access to financial reports or settings.
+  --   4  inventory_clerk   Manage stock, batches, and products. No sales or financials.
+  --   5  viewer            Read-only access to reports and inventory.
+
+[NEW] permissions:
+  id
+  module                      e.g. sales, inventory, reports, customers, expenses, users, settings
+  action                      e.g. view, create, edit, delete, void, apply_discount
+  name                        Human-readable. e.g. "View Sales Report"
+  description
+
+  -- Full permission list (suggested):
+  --
+  -- SALES
+  --   sales.view             View sales history and receipts
+  --   sales.create           Process new transactions at POS
+  --   sales.void             Void a completed sale
+  --   sales.apply_discount   Apply manual discounts during checkout
+  --   sales.hold             Park / hold a transaction
+  --
+  -- INVENTORY
+  --   inventory.view         View stock levels and batches
+  --   inventory.create       Receive new stock batches
+  --   inventory.edit         Edit product details and pricing
+  --   inventory.adjust       Manual stock adjustments
+  --   inventory.delete       Deactivate products
+  --
+  -- CUSTOMERS
+  --   customers.view         View customer list and credit info
+  --   customers.create       Add new customers
+  --   customers.edit         Edit customer details
+  --   customers.delete       Soft-delete customers
+  --   customers.credit       Record and manage credit transactions
+  --
+  -- EXPENSES
+  --   expenses.view          View expense records
+  --   expenses.create        Log new expenses
+  --   expenses.edit          Edit existing expenses
+  --   expenses.delete        Delete expense records
+  --
+  -- REPORTS
+  --   reports.sales          Access sales reports and summaries
+  --   reports.inventory      Access inventory reports
+  --   reports.financial      Access profit/loss and cash flow reports
+  --   reports.credit         Access credit and receivables reports
+  --   reports.audit          Access audit logs and user activity
+  --
+  -- USERS & ROLES
+  --   users.view             View user accounts
+  --   users.create           Add new user accounts
+  --   users.edit             Edit user details and reset passwords
+  --   users.delete           Deactivate user accounts
+  --   roles.manage           Create, edit, and assign roles and permissions
+  --
+  -- SESSIONS
+  --   sessions.open          Open a POS shift
+  --   sessions.close         Close a POS shift
+  --   sessions.view_others   View sessions opened by other users
+  --
+  -- SETTINGS
+  --   settings.manage        Access and edit system configuration
+
+[NEW] role_permissions:
+  id
+  role_id                     FK to roles.id
+  permission_id               FK to permissions.id
+  -- Junction table. Defines which permissions each role has.
+  -- UNIQUE constraint on (role_id, permission_id)
+
+[NEW] users:
+  id
+  role_id                     FK to roles.id
+  first_name
+  last_name
+  username                    Unique. Used for login.
+  email                       Unique. Optional but recommended for recovery.
+  password_hash               Hashed password (bcrypt / argon2). Never store plaintext.
+  pin_hash                    [OPTIONAL] Hashed short PIN for quick POS re-auth / lock screen
+  is_active                   Soft delete. false = account disabled, cannot log in.
+  must_change_password        Boolean. Force password reset on first login or after admin reset.
+  last_login_at               Track last successful login timestamp.
+  created_by                  FK to users.id — which user created this account
+  created_at
+  updated_at
+
+[NEW] user_sessions:
+  id
+  user_id                     FK to users.id
+  token_hash                  Hashed session token or JWT identifier
+  ip_address                  Optional. Useful for audit trail.
+  device_info                 Optional. Browser/device string.
+  created_at                  Login time
+  expires_at                  Token expiry
+  revoked_at                  NULL = active. Set to revoke/logout.
+
+  -- On login:  insert a new row with a generated token, return token to client.
+  -- On logout: set revoked_at = NOW().
+  -- On request: validate token exists, is not revoked, and not expired.
+
+[NEW] password_reset_tokens:
+  id
+  user_id                     FK to users.id
+  token_hash                  Hashed one-time reset token
+  expires_at
+  used_at                     NULL = not yet used. Set on use to prevent reuse.
+  created_at
+
+--------------------------------------------------------------------------------
+AUDIT LOG  [NEW SECTION]
+--------------------------------------------------------------------------------
+
+[NEW] audit_logs:
+  id
+  user_id                     FK to users.id — who performed the action (nullable for system)
+  action                      e.g. created, updated, deleted, voided, login, logout, failed_login
+  module                      e.g. sales, inventory, users, settings
+  record_id                   ID of the affected record (nullable)
+  old_value                   JSON snapshot of record before change (nullable)
+  new_value                   JSON snapshot of record after change (nullable)
+  ip_address
+  notes
+  created_at
+
+  -- Recommended actions to log:
+  --   All logins (success and failure)
+  --   Logouts and session revocations
+  --   Sale voids and discounts
+  --   Price changes
+  --   Stock adjustments
+  --   User account changes (create, edit, deactivate)
+  --   Role/permission changes
+
+--------------------------------------------------------------------------------
+SESSIONS / SHIFTS  [CHANGED — now tied to a user]
+--------------------------------------------------------------------------------
+
+sessions:
+  id
+  user_id                     [NEW] FK to users.id — who opened the shift
   opened_at
   closed_at                   NULL while session is open
-  opening_cash                Float declared at session start
-  closing_cash                Float counted at session close
+  opening_cash
+  closing_cash
   notes
-  -- Tracks each POS shift for daily cash reconciliation.
+  created_at
 
-[NEW] session_cash_movements:
+session_cash_movements:
   id
   session_id                  FK to sessions.id
+  user_id                     [NEW] FK to users.id — who recorded the movement
   movement_type               e.g. cash_in, cash_out
   amount
-  notes                       e.g. "bank deposit", "petty cash refill"
+  notes
   created_at
 
 --------------------------------------------------------------------------------
@@ -75,12 +224,14 @@ PRODUCTS
 
 products:
   id
-  name                        e.g. Snow Bear
-  unit_id                     FK to units.id (base unit)
+  name
+  unit_id                     FK to units.id
   product_category_id         FK to product_categories.id
-  stock_quantity              Denormalized for fast reads. Keep in sync via app/trigger.
+  stock_quantity
   image_url
-  is_active                   Soft delete. true = active
+  is_active
+  created_by                  [NEW] FK to users.id
+  updated_by                  [NEW] FK to users.id
   created_at
   updated_at
 
@@ -88,11 +239,12 @@ product_pricing:
   id
   product_id                  FK to products.id
   unit_id                     FK to units.id
-  label                       Display label in POS unit picker. e.g. "Per Liter (L)"
+  label
   retail_price
   wholesale_price
-  wholesale_min_qty           Minimum qty to qualify for wholesale price
-  effective_date              Price history is preserved by inserting new rows
+  wholesale_min_qty
+  effective_date
+  created_by                  [NEW] FK to users.id — who set this price
 
 --------------------------------------------------------------------------------
 BUNDLES
@@ -100,9 +252,10 @@ BUNDLES
 
 bundles:
   id
-  bundle_name                 e.g. 3 Candies for 5 pesos
+  bundle_name
   bundle_price
   is_active
+  created_by                  [NEW] FK to users.id
   created_at
   updated_at
 
@@ -124,6 +277,7 @@ stock_batches:
   quantity_received
   expiration_date
   notes
+  received_by                 [NEW] FK to users.id
   created_at
   updated_at
 
@@ -131,9 +285,10 @@ stock_logs:
   id
   product_id                  FK to products.id
   unit_id                     FK to units.id
-  stock_batch_id              FK to stock_batches.id (nullable — not all logs tie to a batch)
+  stock_batch_id              FK to stock_batches.id (nullable)
   stock_log_reason_id         FK to stock_log_reasons.id
-  change_qty                  Positive = stock in, Negative = stock out
+  performed_by                [NEW] FK to users.id — who made the change
+  change_qty
   notes
   created_at
 
@@ -151,7 +306,9 @@ customers:
   barangay
   street
   credit_limit
-  is_active                   [NEW] Soft delete for consistency with products
+  is_active
+  created_by                  [NEW] FK to users.id
+  updated_by                  [NEW] FK to users.id
   created_at
   updated_at
 
@@ -161,15 +318,20 @@ SALES
 
 sales:
   id
-  session_id                  [NEW] FK to sessions.id — ties each sale to a shift
-  customer_id                 FK to customers.id (nullable for walk-in/anonymous)
+  session_id                  FK to sessions.id
+  cashier_id                  [NEW] FK to users.id — who processed the transaction
+  customer_id                 FK to customers.id (nullable for walk-in)
   payment_type_id             FK to payment_types.id
-  sale_status_id              [NEW] FK to sale_statuses.id — replaces no-status gap
+  sale_status_id              FK to sale_statuses.id
+  voided_by                   [NEW] FK to users.id (nullable — set when voided)
+  voided_at                   [NEW] Timestamp of void
+  void_reason                 [NEW] Short explanation required when voiding
   sale_date
   subtotal
   discount
+  discount_approved_by        [NEW] FK to users.id — manager approval for large discounts
   total_amount
-  notes                       [NEW] e.g. "market day discount", "bulk order"
+  notes
   created_at
 
 sale_items:
@@ -177,7 +339,7 @@ sale_items:
   sale_id                     FK to sales.id
   product_id                  FK to products.id
   unit_id                     FK to units.id
-  sale_type_id                [CHANGED] FK to sale_types.id — was free-text, now normalized
+  sale_type_id                FK to sale_types.id
   quantity_sold
   unit_price
 
@@ -195,25 +357,27 @@ sale_bundle_items:
   quantity_deducted
 
 --------------------------------------------------------------------------------
-RETURNS & REFUNDS  [NEW SECTION]
+RETURNS & REFUNDS
 --------------------------------------------------------------------------------
 
-[NEW] sale_returns:
+sale_returns:
   id
   original_sale_id            FK to sales.id
+  processed_by                [NEW] FK to users.id — who processed the return
+  approved_by                 [NEW] FK to users.id — manager who approved (nullable)
   return_reason_id            FK to return_reasons.id
   return_date
   total_refund_amount
   notes
   created_at
 
-[NEW] sale_return_items:
+sale_return_items:
   id
   sale_return_id              FK to sale_returns.id
-  sale_item_id                FK to sale_items.id (original line being returned)
+  sale_item_id                FK to sale_items.id
   quantity_returned
-  refund_amount               Per-line refund (may differ from original price e.g. partial)
-  restock                     Boolean — whether item goes back to inventory
+  refund_amount
+  restock                     Boolean
 
 --------------------------------------------------------------------------------
 CREDIT
@@ -223,16 +387,18 @@ credit_transactions:
   id
   customer_id                 FK to customers.id
   sale_id                     FK to sales.id
+  created_by                  [NEW] FK to users.id
   amount_owed
-  amount_paid                 [NEW] Running total paid, updated on each payment
-  remaining_balance           [NEW] Computed: amount_owed - amount_paid (or use a view)
+  amount_paid
+  remaining_balance
   due_date
-  is_settled                  [NEW] Boolean flag for quick filtering of open vs closed debts
+  is_settled
   created_at
 
 credit_payments:
   id
   credit_transaction_id       FK to credit_transactions.id
+  received_by                 [NEW] FK to users.id — who collected the payment
   amount_paid
   paid_at
   notes
@@ -244,43 +410,109 @@ EXPENSES
 expenses:
   id
   expense_category_id         FK to expense_categories.id
-  session_id                  [NEW] FK to sessions.id (nullable) — ties expense to a shift
+  session_id                  FK to sessions.id (nullable)
+  recorded_by                 [NEW] FK to users.id
+  approved_by                 [NEW] FK to users.id (nullable — for larger expenses)
   amount
   notes
   image_url
-  expense_date                Use this for reporting
-  created_at                  Use this for auditing
+  expense_date
+  created_at
+
+================================================================================
+ROLE → PERMISSION MATRIX (Suggested Defaults)
+================================================================================
+
+  Permission                  owner   manager  cashier  inv_clerk  viewer
+  --------------------------  ------  -------  -------  ---------  ------
+  sales.view                    ✓       ✓        ✓         -          ✓
+  sales.create                  ✓       ✓        ✓         -          -
+  sales.void                    ✓       ✓        -         -          -
+  sales.apply_discount          ✓       ✓        -         -          -
+  sales.hold                    ✓       ✓        ✓         -          -
+  inventory.view                ✓       ✓        -         ✓          ✓
+  inventory.create              ✓       ✓        -         ✓          -
+  inventory.edit                ✓       ✓        -         ✓          -
+  inventory.adjust              ✓       ✓        -         ✓          -
+  inventory.delete              ✓       -        -         -          -
+  customers.view                ✓       ✓        ✓         -          ✓
+  customers.create              ✓       ✓        ✓         -          -
+  customers.edit                ✓       ✓        -         -          -
+  customers.delete              ✓       -        -         -          -
+  customers.credit              ✓       ✓        ✓         -          -
+  expenses.view                 ✓       ✓        -         -          ✓
+  expenses.create               ✓       ✓        -         -          -
+  expenses.edit                 ✓       ✓        -         -          -
+  expenses.delete               ✓       -        -         -          -
+  reports.sales                 ✓       ✓        -         -          ✓
+  reports.inventory             ✓       ✓        -         ✓          ✓
+  reports.financial             ✓       ✓        -         -          -
+  reports.credit                ✓       ✓        -         -          ✓
+  reports.audit                 ✓       -        -         -          -
+  users.view                    ✓       ✓        -         -          -
+  users.create                  ✓       -        -         -          -
+  users.edit                    ✓       -        -         -          -
+  users.delete                  ✓       -        -         -          -
+  roles.manage                  ✓       -        -         -          -
+  sessions.open                 ✓       ✓        ✓         -          -
+  sessions.close                ✓       ✓        ✓         -          -
+  sessions.view_others          ✓       ✓        -         -          -
+  settings.manage               ✓       -        -         -          -
 
 ================================================================================
 NOTES ON KEY DESIGN DECISIONS
 ================================================================================
 
-1. STOCK SOURCE OF TRUTH
-   products.stock_quantity is kept as a denormalized fast-read column.
-   It must be updated atomically alongside every stock_logs insert.
-   The true stock can always be recomputed from stock_logs if discrepancy is found.
+1. AUTHENTICATION FLOW
+   - User submits username + password.
+   - App verifies password_hash using bcrypt/argon2.
+   - On success: insert into user_sessions, return session token to client.
+   - Each request: client sends token → app looks up user_sessions, joins users
+     and roles, checks is_active, checks expiry, loads permissions.
+   - On logout: set user_sessions.revoked_at = NOW().
+   - Failed logins should be recorded in audit_logs to detect brute force attempts.
 
-2. PRICE HISTORY
-   product_pricing uses effective_date rows rather than overwriting prices.
-   The active price for a product is the row with the latest effective_date <= today.
+2. PERMISSION CHECKING
+   - At runtime, load the user's role → fetch all permissions via role_permissions.
+   - Cache permissions per session to avoid repeated DB lookups.
+   - For sensitive actions (void, large discount, return approval), check both
+     the permission AND optionally require a secondary auth (re-enter PIN).
 
-3. VOIDING SALES
-   Set sales.sale_status_id to 'voided'. Do not delete rows.
-   Voiding should trigger compensating stock_logs entries (positive change_qty)
-   to restore inventory.
+3. PIN RE-AUTH (OPTIONAL)
+   - users.pin_hash enables a quick lock screen at the POS without full logout.
+   - Cashier steps away → POS locks → next user enters PIN to unlock or switch user.
+   - Useful for shared terminals.
 
-4. HELD / PARKED TRANSACTIONS
-   Set sales.sale_status_id to 'held'. Items are reserved but stock is not deducted
-   until the sale is completed.
+4. APPROVAL WORKFLOWS
+   - sales.discount_approved_by: if discount exceeds a threshold, cashier must
+     call manager who enters their credentials to approve.
+   - sale_returns.approved_by: returns above a threshold require manager sign-off.
+   - expenses.approved_by: large expenses can require owner/manager approval.
+   - These fields are nullable — only populated when approval was needed.
 
-5. CREDIT BALANCE
-   credit_transactions.remaining_balance can be stored as a column updated on
-   each credit_payment, or computed via a database view. For a single-user SQLite
-   setup, a view is recommended to avoid sync bugs.
+5. AUDIT LOG STRATEGY
+   - Log every write operation (insert/update/delete) on sensitive tables.
+   - Store old_value and new_value as JSON for full changesets.
+   - Never delete audit_log rows. This is your tamper evidence trail.
+   - Only users with reports.audit permission can view audit logs.
 
-6. SESSIONS
-   Each day (or shift) should open one session. All sales and cash movements
-   are tied to it. On close, compare sum of completed sales + opening_cash +
-   cash_in movements - cash_out movements against closing_cash to get variance.
+6. SOFT DELETES ON USERS
+   - Never hard delete a user account. Set is_active = false.
+   - Past sales, stock logs, and audit trails reference user IDs — deleting breaks history.
+   - Revoke all active user_sessions when deactivating an account.
+
+7. STOCK SOURCE OF TRUTH
+   - products.stock_quantity is denormalized for fast POS reads.
+   - Always update it atomically alongside stock_logs inserts.
+   - stock_logs.performed_by identifies who made each inventory change.
+
+8. PRICE HISTORY
+   - product_pricing uses effective_date rows rather than overwriting prices.
+   - product_pricing.created_by tracks who changed the price and when.
+
+9. SESSION / SHIFT RECONCILIATION
+   - sessions.user_id tracks who opened and is responsible for the shift.
+   - All sales in a session are filterable by sessions.user_id for per-cashier reports.
+   - Cash variance = closing_cash - (opening_cash + cash_in - cash_out + completed sale totals).
 
 ================================================================================

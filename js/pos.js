@@ -1,5 +1,5 @@
 // ============================================================
-// POS — Point of Sale (new schema: sale_bundles, sale_types, credit)
+// POS — Point of Sale
 // ============================================================
 function setPosMode(mode) {
   posMode = mode;
@@ -29,19 +29,17 @@ function renderPos() {
         `<button class="filter-tab ${c === posCategory ? "active" : ""}" onclick="filterPosCategory('${c}', this)">${c}</button>`,
     )
     .join("");
-
   renderPosGrid();
-
   const sel = document.getElementById("credit-customer-id");
   sel.innerHTML =
     '<option value="">-- Piliin ang customer --</option>' +
     db.customers
+      .filter((c) => c.is_active !== false)
       .map(
         (c) =>
           `<option value="${c.id}">${c.first_name} ${c.last_name}</option>`,
       )
       .join("");
-
   renderCart();
   if (posMode === "bundles") renderPosBundles();
 }
@@ -113,7 +111,6 @@ function renderPosBundles() {
   const grid = document.getElementById("pos-bundle-grid");
   const empty = document.getElementById("pos-bundle-empty");
   const activeBundles = db.bundles.filter((b) => b.is_active);
-
   if (activeBundles.length === 0) {
     grid.style.display = "none";
     empty.style.display = "block";
@@ -121,7 +118,6 @@ function renderPosBundles() {
   }
   grid.style.display = "grid";
   empty.style.display = "none";
-
   grid.innerHTML = activeBundles
     .map((b) => {
       const bItems = getBundleItems(b.id);
@@ -141,12 +137,11 @@ function renderPosBundles() {
         const p = db.products.find((x) => x.id === bi.product_id);
         return p && p.stock_quantity >= bi.quantity;
       });
-      const firstProduct =
+      const firstProd =
         bItems.length === 1
           ? db.products.find((p) => p.id === bItems[0].product_id)
           : null;
-      const emoji = firstProduct ? firstProduct.image_url : "🎁";
-
+      const emoji = firstProd ? firstProd.image_url : "🎁";
       return `
     <div class="bundle-pos-card ${selected} ${!hasStock ? "opacity-50" : ""}" onclick="${hasStock ? `addBundleToCart(${b.id})` : ""}">
       <div class="bundle-pos-badge">${qty}</div>
@@ -164,16 +159,15 @@ function renderPosBundles() {
 }
 
 function addToCart(product_id) {
+  if (!requirePermission("sales.create")) return;
   const product = db.products.find((p) => p.id === product_id);
   if (!product) return;
   if (product.stock_quantity <= 0) {
     showToast("Wala nang stock!", "error");
     return;
   }
-
   const unitOptions = getProductUnitOptions(product_id);
   const pkgConv = getProductPackageConversion(product_id);
-  // Open picker if: multiple units, continuous base unit, OR has a pack conversion
   if (unitOptions.length > 0 || isContinuousUnit(product.unit_id) || pkgConv) {
     openUnitPickerModal(product_id);
     return;
@@ -215,7 +209,6 @@ function addToCartWithUnit(product_id, unit_id, quantity) {
     showToast("Hindi sapat ang stock!", "warning");
     return;
   }
-
   const existing = cart.find(
     (c) => c.product_id === product_id && c.unit_id === unit_id,
   );
@@ -268,7 +261,6 @@ function openUnitPickerModal(product_id) {
       cartQty > 0
         ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${fmtQty(cartQty, unit_id)} in cart</div>`
         : "";
-
     if (isCont) {
       const step = unitStep(unit_id);
       const inputId = `upi-qty-${unit_id}`;
@@ -323,7 +315,6 @@ function openUnitPickerModal(product_id) {
       cartItem ? cartItem.quantity : 0,
     );
   }
-
   unitOptions.forEach((pu) => {
     if (pu.unit_id === product.unit_id) return;
     const unit = db.units.find((u) => u.id === pu.unit_id);
@@ -340,13 +331,11 @@ function openUnitPickerModal(product_id) {
     );
   });
 
-  // Pack option — shown when a product_package_conversions row exists
   const pkgConv = getProductPackageConversion(product_id);
   if (pkgConv) {
-    const packUnit = db.units.find((u) => u.id === pkgConv.pack_unit_id); // e.g. "pack"
-    const packAbbrv = packUnit ? packUnit.abbreviation : "pk";
+    const packUnit = db.units.find((u) => u.id === pkgConv.pack_unit_id);
+    const packAbbr = packUnit ? packUnit.abbreviation : "pk";
     const packName = packUnit ? packUnit.name : "Pack";
-    // Compute pack price from base pricing
     const basePricing = getProductPricing(product_id);
     const packRetailPrice = basePricing
       ? basePricing.retail_price * pkgConv.pieces_per_pack
@@ -371,14 +360,11 @@ function openUnitPickerModal(product_id) {
       packInCart > 0
         ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${packInCart} pk in cart</div>`
         : "";
-    // Max packs available
     const maxPacks = Math.floor(
       product.stock_quantity / pkgConv.pieces_per_pack,
     );
     const noStock = maxPacks === 0;
     const inputId = `upi-qty-${pkgConv.pack_unit_id}`;
-
-    // Build pack card HTML using variables — avoid ternaries inside HTML attributes
     const packCardStyle = noStock
       ? "opacity:0.45;background:#f5f5f5;border-color:#ccc;pointer-events:none;cursor:not-allowed;"
       : "cursor:default;border-color:var(--accent);background:var(--accent-light);";
@@ -393,21 +379,18 @@ function openUnitPickerModal(product_id) {
           <button type="button" class="qty-btn" onclick="var el=document.getElementById('${inputId}');var v=parseInt(el.value)||1;if(v>1)el.value=v-1;">&#8722;</button>
           <input type="number" id="${inputId}" min="1" max="${maxPacks}" step="1" value="1"
             style="width:80px;text-align:center;font-size:16px;font-weight:700;border:2px solid var(--accent);border-radius:8px;padding:6px 4px;outline:none;">
-          <span style="font-size:13px;color:var(--muted);font-weight:600;">${packAbbrv}</span>
+          <span style="font-size:13px;color:var(--muted);font-weight:600;">${packAbbr}</span>
           <button type="button" class="qty-btn" onclick="var el=document.getElementById('${inputId}');var v=parseInt(el.value)||1;if(v<${maxPacks})el.value=v+1;else showToast('Max ${maxPacks} packs available!','warning');">&#43;</button>
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto;white-space:nowrap;"
             onclick="addToCartWithUnit(${product_id}, ${pkgConv.pack_unit_id}, parseInt(document.getElementById('${inputId}').value))">
             + I-add
           </button>
         </div>`;
-
     optionsHtml += `
     <div class="unit-picker-opt ${packInCart > 0 ? "selected" : ""}" style="${packCardStyle}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <div>
-          <div style="font-weight:700;">
-            &#128230; ${packName}
-            <span style="font-size:11px;color:var(--muted);">(${packAbbrv})</span>
+          <div style="font-weight:700;">&#128230; ${packName} <span style="font-size:11px;color:var(--muted);">(${packAbbr})</span>
             <span style="font-size:10px;background:${packBadgeBg};color:white;border-radius:4px;padding:1px 5px;margin-left:4px;">${pkgConv.pieces_per_pack} pc each</span>
           </div>
           <div style="font-size:12px;color:var(--muted);">Retail: ${fmt(packRetailPrice)} / pack${wsInfo}</div>
@@ -425,6 +408,7 @@ function openUnitPickerModal(product_id) {
 }
 
 function addBundleToCart(bundle_id) {
+  if (!requirePermission("sales.create")) return;
   const bundle = db.bundles.find((b) => b.id === bundle_id);
   if (!bundle) return;
   const bItems = getBundleItems(bundle_id);
@@ -436,11 +420,8 @@ function addBundleToCart(bundle_id) {
     }
   }
   const existing = cartBundles.find((x) => x.bundle_id === bundle_id);
-  if (existing) {
-    existing.quantity++;
-  } else {
-    cartBundles.push({ bundle_id, quantity: 1 });
-  }
+  if (existing) existing.quantity++;
+  else cartBundles.push({ bundle_id, quantity: 1 });
   renderPosBundles();
   renderCart();
 }
@@ -463,7 +444,6 @@ function changeCartQty(product_id, unit_id, delta) {
     ? unitStep(unit_id) * Math.sign(delta)
     : delta;
   const newQty = parseFloat((cart[idx].quantity + step).toFixed(4));
-
   if (newQty <= 0) {
     cart.splice(idx, 1);
   } else {
@@ -502,7 +482,6 @@ function changeCartQty(product_id, unit_id, delta) {
 function renderCart() {
   const el = document.getElementById("cart-items");
   const countEl = document.getElementById("cart-count");
-
   if (cart.length === 0 && cartBundles.length === 0) {
     el.innerHTML =
       '<div class="empty-state"><div class="icon">🛒</div><p>Walay solud</p></div>';
@@ -512,11 +491,9 @@ function renderCart() {
     document.getElementById("cart-savings-row").style.display = "none";
     return;
   }
-
   let subtotal = 0,
     totalBundleSavings = 0,
     html = "";
-
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
     if (!p) return;
@@ -535,7 +512,6 @@ function renderCart() {
     const priceLabel = isContinuousUnit(item.unit_id)
       ? `${fmt(unitPrice)}/${unit ? unit.abbreviation : ""} × ${qtyDisplay} = ${fmt(lineTotal)}`
       : `${fmt(unitPrice)} × ${qtyDisplay} = ${fmt(lineTotal)}`;
-
     html += `
     <div class="cart-item">
       <div class="cart-item-emoji">${p.image_url}</div>
@@ -550,7 +526,6 @@ function renderCart() {
       </div>
     </div>`;
   });
-
   cartBundles.forEach((cb) => {
     const bundle = db.bundles.find((x) => x.id === cb.bundle_id);
     if (!bundle) return;
@@ -568,7 +543,6 @@ function renderCart() {
           : "";
       })
       .join(" ");
-
     html += `
     <div class="cart-item cart-item-bundle">
       <div class="cart-item-emoji">🎁</div>
@@ -585,7 +559,6 @@ function renderCart() {
       </div>
     </div>`;
   });
-
   el.innerHTML = html;
   const totalItems =
     cart.reduce((a, b) => a + b.quantity, 0) +
@@ -593,15 +566,12 @@ function renderCart() {
   countEl.textContent = `(${totalItems} items)`;
   document.getElementById("cart-subtotal").textContent = fmt(subtotal);
   document.getElementById("cart-total").textContent = fmt(subtotal);
-
   const savingsRow = document.getElementById("cart-savings-row");
   if (totalBundleSavings > 0) {
     savingsRow.style.display = "flex";
     document.getElementById("cart-savings").textContent =
       `-${fmt(totalBundleSavings)}`;
-  } else {
-    savingsRow.style.display = "none";
-  }
+  } else savingsRow.style.display = "none";
 }
 
 function setPayType(type) {
@@ -625,6 +595,7 @@ function clearCart() {
 }
 
 function checkout() {
+  if (!requirePermission("sales.create")) return;
   if (cart.length === 0 && cartBundles.length === 0) {
     showToast("Walang laman ang cart!", "warning");
     return;
@@ -637,7 +608,6 @@ function checkout() {
       showToast("Piliin ang customer para sa utang!", "warning");
       return;
     }
-
     const customer = db.customers.find((c) => c.id === customerId);
     const existingDebt = getCustomerDebt(customerId);
     let orderTotal = cart.reduce((sum, item) => {
@@ -650,7 +620,6 @@ function checkout() {
       const b = db.bundles.find((x) => x.id === cb.bundle_id);
       return sum + (b ? b.bundle_price * cb.quantity : 0);
     }, 0);
-
     if (existingDebt + orderTotal > customer.credit_limit) {
       showToast(
         `Lampas sa credit limit ni ${customer.first_name}! (${fmt(customer.credit_limit)})`,
@@ -660,14 +629,12 @@ function checkout() {
     }
   }
 
-  // Create sale
   const paymentTypeObj = db.payment_types.find((pt) => pt.name === payType);
   const saleId = genId("sales");
   const saleDate = now();
   const dateStr = todayISO();
   let subtotal = 0;
 
-  // Compute subtotal for sales.subtotal field
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
     if (!p) return;
@@ -684,21 +651,33 @@ function checkout() {
     if (b) subtotal += b.bundle_price * cb.quantity;
   });
 
+  // Find active pos_session for this user if any
+  const activePosSession = db.pos_sessions.find(
+    (s) => s.user_id === (currentUser ? currentUser.id : null) && !s.closed_at,
+  );
+
   db.sales.push({
     id: saleId,
+    cashier_id: currentUser ? currentUser.id : null,
+    session_id: activePosSession ? activePosSession.id : null,
     customer_id: customerId,
     payment_type_id: paymentTypeObj.id,
+    sale_status_id: 1, // completed
+    voided_by: null,
+    voided_at: null,
+    void_reason: null,
+    discount_approved_by: null,
     sale_date: saleDate,
     subtotal: subtotal,
     discount: 0,
     total_amount: subtotal,
+    notes: null,
     created_at: dateStr,
   });
 
   let total = 0;
   let receiptItems = [];
 
-  // Regular product items → sale_items
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
     const { unitPrice, saleType } = resolveUnitPrice(
@@ -709,7 +688,6 @@ function checkout() {
     );
     const lineTotal = unitPrice * item.quantity;
     total += lineTotal;
-
     db.sale_items.push({
       id: genId("sale_items"),
       sale_id: saleId,
@@ -718,9 +696,8 @@ function checkout() {
       quantity_sold: item.quantity,
       unit_price: unitPrice,
       total_price: lineTotal,
-      sale_type: saleType, // string: "retail" or "wholesale"
+      sale_type: saleType,
     });
-
     const baseQty = convertToBaseUnits(
       item.quantity,
       item.unit_id,
@@ -734,11 +711,11 @@ function checkout() {
       unit_id: item.unit_id,
       stock_batch_id: null,
       stock_log_reason_id: getStockLogReasonId("sold"),
+      performed_by: currentUser ? currentUser.id : null,
       change_qty: -item.quantity,
       notes: `Sale #${saleId}`,
       created_at: dateStr,
     });
-
     const unit = db.units.find((u) => u.id === item.unit_id);
     receiptItems.push({
       name: p.name + (unit && unit.id !== 1 ? ` (${unit.abbreviation})` : ""),
@@ -750,15 +727,12 @@ function checkout() {
     });
   });
 
-  // Bundle items → sale_bundles + sale_bundle_items
   cartBundles.forEach((cb) => {
     const bundle = db.bundles.find((x) => x.id === cb.bundle_id);
     if (!bundle) return;
     const bItems = getBundleItems(bundle.id);
     const lineTotal = bundle.bundle_price * cb.quantity;
     total += lineTotal;
-
-    // Create sale_bundles row
     const saleBundleId = genId("sale_bundles");
     db.sale_bundles.push({
       id: saleBundleId,
@@ -767,13 +741,10 @@ function checkout() {
       quantity_sold: cb.quantity,
       unit_price: bundle.bundle_price,
     });
-
-    // sale_bundle_items: per-product deductions
     bItems.forEach((bi) => {
       const p = db.products.find((x) => x.id === bi.product_id);
       if (!p) return;
       const totalQty = bi.quantity * cb.quantity;
-
       db.sale_bundle_items.push({
         id: genId("sale_bundle_items"),
         sale_bundle_id: saleBundleId,
@@ -782,7 +753,6 @@ function checkout() {
         unit_id: bi.unit_id || p.unit_id,
         quantity_deducted: totalQty,
       });
-
       p.stock_quantity -= totalQty;
       db.stock_logs.push({
         id: genId("stock_logs"),
@@ -790,12 +760,12 @@ function checkout() {
         unit_id: p.unit_id,
         stock_batch_id: null,
         stock_log_reason_id: getStockLogReasonId("sold"),
+        performed_by: currentUser ? currentUser.id : null,
         change_qty: -totalQty,
         notes: `Bundle sale #${saleId} — ${bundle.bundle_name}`,
         created_at: dateStr,
       });
     });
-
     receiptItems.push({
       name: bundle.bundle_name,
       qty: cb.quantity,
@@ -811,21 +781,27 @@ function checkout() {
     });
   });
 
-  // Create credit row if credit sale
   if (payType === "credit") {
-    db.credit.push({
+    const newCredit = {
       id: genId("credit"),
       customer_id: customerId,
       sale_id: saleId,
       amount_owed: total,
       due_date: "",
+      created_by: currentUser ? currentUser.id : null,
       created_at: dateStr,
-    });
+    };
+    db.credit.push(newCredit);
+    addAuditLog("created", "credit", newCredit.id, null, newCredit);
   }
 
+  addAuditLog("created", "sales", saleId, null, {
+    total,
+    payment: payType,
+    cashier_id: currentUser ? currentUser.id : null,
+  });
   saveDb();
   showReceipt(receiptItems, total, payType, customerId, saleDate);
-
   cart = [];
   cartBundles = [];
   setPayType("cash");
@@ -844,37 +820,33 @@ function showReceipt(items, total, payType, customerId, date) {
   const customer = customerId
     ? db.customers.find((c) => c.id === customerId)
     : null;
+  const cashierName = currentUser
+    ? `${currentUser.first_name} ${currentUser.last_name}`
+    : "—";
   let html = `<div class="receipt">
     <div class="receipt-title">🏪 Tindahan ni Duane</div>
     <div class="receipt-sub">${date}</div>
+    <div class="receipt-sub" style="font-size:10px;color:#aaa;">Cashier: ${cashierName}</div>
     <hr class="receipt-divider">`;
-
   items.forEach((i) => {
     const qtyStr = i.qtyDisplay !== undefined ? i.qtyDisplay : `x${i.qty}`;
     html += `<div class="receipt-row"><span>${i.isBundle ? "🎁 " : ""}${i.name} ${i.isBundle ? "x" + i.qty : qtyStr}</span><span>${fmt(i.total)}</span></div>`;
-    if (i.isBundle && i.bundleItems) {
+    if (i.isBundle && i.bundleItems)
       i.bundleItems.forEach((bi) => {
         html += `<div class="receipt-row" style="padding-left:12px;font-size:11px;color:#777"><span>↳ ${bi}</span></div>`;
       });
-    }
   });
-
   html += `<hr class="receipt-divider">
     <div class="receipt-row receipt-total"><span>TOTAL</span><span>${fmt(total)}</span></div>
     <hr class="receipt-divider">
     <div class="receipt-row"><span>Payment</span><span>${payType === "credit" ? "UTANG" : "CASH"}</span></div>`;
-
   if (customer)
     html += `<div class="receipt-row"><span>Customer</span><span>${customer.first_name} ${customer.last_name}</span></div>`;
   html += `<hr class="receipt-divider"><div style="text-align:center;font-size:11px;color:#888">Salamat sa inyong pagbili! 🙏</div></div>`;
-
   document.getElementById("receipt-content").innerHTML = html;
   openModal("modal-receipt");
 }
 
-// ============================================================
-// MOBILE CART DRAWER TOGGLE
-// ============================================================
 function toggleMobileCart() {
   const cart = document.querySelector(".pos-right");
   if (!cart) return;
@@ -883,11 +855,10 @@ function toggleMobileCart() {
 
 document.addEventListener("DOMContentLoaded", function () {
   const cartHeader = document.querySelector(".cart-header");
-  if (cartHeader) {
+  if (cartHeader)
     cartHeader.addEventListener("click", function () {
       if (window.innerWidth <= 1024) toggleMobileCart();
     });
-  }
 });
 
 function maybeExpandMobileCart() {

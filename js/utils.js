@@ -18,6 +18,7 @@ function todayISO() {
 }
 
 function genId(type) {
+  if (!db.nextId[type]) db.nextId[type] = 1;
   return db.nextId[type]++;
 }
 
@@ -34,7 +35,6 @@ function showToast(msg, type = "success") {
 function openModal(id) {
   document.getElementById(id).classList.add("open");
 }
-
 function closeModal(id) {
   document.getElementById(id).classList.remove("open");
 }
@@ -46,27 +46,28 @@ function showPage(name, el) {
   document
     .querySelectorAll(".nav-item")
     .forEach((n) => n.classList.remove("active"));
-  document.getElementById("page-" + name).classList.add("active");
+  const pageEl = document.getElementById("page-" + name);
+  if (!pageEl) return;
+  pageEl.classList.add("active");
   if (el) el.classList.add("active");
-  document.getElementById("page-title").textContent = {
-    dashboard: "Dashboard",
-    pos: "Benta (POS)",
-    products: "Products",
-    bundles: "Bundle Pricing",
-    stocklogs: "Stock Logs",
-    sales: "Sales History",
-    credits: "Utang",
-    expenses: "Expenses",
-    customers: "Customers",
-  }[name];
+  document.getElementById("page-title").textContent =
+    {
+      dashboard: "Dashboard",
+      pos: "Benta (POS)",
+      products: "Products",
+      bundles: "Bundle Pricing",
+      stocklogs: "Stock Logs",
+      sales: "Sales History",
+      credits: "Utang",
+      expenses: "Expenses",
+      customers: "Customers",
+      users: "User Management",
+      auditlogs: "Audit Logs",
+    }[name] || name;
   refreshPage(name);
-  // Close mobile sidebar when navigating
   if (typeof closeSidebar === "function") closeSidebar();
-  // Collapse mobile cart when leaving POS
   const posCart = document.querySelector(".pos-right");
-  if (posCart && name !== "pos") {
-    posCart.classList.remove("cart-expanded");
-  }
+  if (posCart && name !== "pos") posCart.classList.remove("cart-expanded");
 }
 
 function refreshPage(name) {
@@ -79,12 +80,12 @@ function refreshPage(name) {
   if (name === "credits") renderCredits();
   if (name === "expenses") renderExpenses();
   if (name === "customers") renderCustomers();
+  if (name === "users") renderUsers();
+  if (name === "auditlogs") renderAuditLogs();
   updateUtangBadge();
 }
 
-// ============================================================
-// CLOCK
-// ============================================================
+// ── Clock ──────────────────────────────────────────────────
 function updateClock() {
   const el = document.getElementById("clock");
   const n = new Date();
@@ -100,16 +101,13 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-// ============================================================
-// SIDEBAR — mobile drawer toggle
-// ============================================================
+// ── Sidebar ────────────────────────────────────────────────
 function toggleSidebar() {
   const sidebar = document.getElementById("sidebar");
   const overlay = document.getElementById("sidebar-overlay");
   const isOpen = sidebar.classList.contains("open");
-  if (isOpen) {
-    closeSidebar();
-  } else {
+  if (isOpen) closeSidebar();
+  else {
     sidebar.classList.add("open");
     overlay.classList.add("open");
     document.body.style.overflow = "hidden";
@@ -117,9 +115,7 @@ function toggleSidebar() {
 }
 
 function closeSidebar() {
-  const sidebar = document.getElementById("sidebar");
-  const overlay = document.getElementById("sidebar-overlay");
-  sidebar.classList.remove("open");
-  overlay.classList.remove("open");
+  document.getElementById("sidebar").classList.remove("open");
+  document.getElementById("sidebar-overlay").classList.remove("open");
   document.body.style.overflow = "";
 }

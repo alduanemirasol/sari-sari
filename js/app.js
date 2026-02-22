@@ -12,5 +12,9 @@ function confirmResetDb() {
 }
 
 // Boot
-renderDashboard();
-updateUtangBadge();
+const isLoggedIn = authInit();
+if (!isLoggedIn) {
+  showLoginScreen();
+} else {
+  onAfterLogin();
+}

@@ -1,15 +1,14 @@
 // ============================================================
-// STOCK LOGS (new schema: stock_log_reason_id FK)
+// STOCK LOGS
 // ============================================================
 function renderStockLogs() {
   const tbody = document.getElementById("stocklogs-body");
   const logs = [...db.stock_logs].reverse();
   if (logs.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="6"><div class="empty-state"><p>No stock logs yet</p></div></td></tr>';
+      '<tr><td colspan="7"><div class="empty-state"><p>No stock logs yet</p></div></td></tr>';
     return;
   }
-
   tbody.innerHTML = logs
     .map((l) => {
       const p = db.products.find((x) => x.id === l.product_id);
@@ -20,7 +19,6 @@ function renderStockLogs() {
       const absQty = Math.abs(l.change_qty);
       const sign = l.change_qty > 0 ? "+" : "-";
       const qtyStr = `${sign}${absQty}${abbrv ? " " + abbrv : ""}`;
-
       const packNote = l.pack_qty
         ? `<div style="font-size:11px;color:var(--accent);margin-top:2px;">${l.pack_qty} pk × ${l.pieces_per_pack} = ${Math.abs(l.change_qty)} ${abbrv}</div>`
         : "";
@@ -31,11 +29,9 @@ function renderStockLogs() {
         if (batch && batch.expiration_date) expiryStr = batch.expiration_date;
       }
 
-      // Support both old string reason and new stock_log_reason_id
       const reasonName = l.stock_log_reason_id
         ? getStockLogReasonName(l.stock_log_reason_id)
         : l.reason || "adjustment";
-
       const reasonBadge =
         {
           restocked: '<span class="badge badge-green">Restock</span>',
@@ -43,21 +39,25 @@ function renderStockLogs() {
           damaged: '<span class="badge badge-red">Damaged</span>',
           expired: '<span class="badge badge-yellow">Expired</span>',
           adjustment: '<span class="badge badge-blue">Adjustment</span>',
+          returned: '<span class="badge badge-yellow">Returned</span>',
         }[reasonName] || `<span class="badge badge-blue">${reasonName}</span>`;
 
+      const performer = getUserDisplayName(l.performed_by);
       return `<tr>
-    <td>${pname}</td>
-    <td style="color:${qtyColor};font-weight:700">${qtyStr}${packNote}</td>
-    <td>${reasonBadge}</td>
-    <td style="color:var(--muted);font-size:12px">${expiryStr}</td>
-    <td style="color:var(--muted);font-size:12px">${l.notes || "—"}</td>
-    <td style="color:var(--muted);font-size:12px">${l.created_at}</td>
-  </tr>`;
+      <td>${pname}</td>
+      <td style="color:${qtyColor};font-weight:700">${qtyStr}${packNote}</td>
+      <td>${reasonBadge}</td>
+      <td style="color:var(--muted);font-size:12px">${expiryStr}</td>
+      <td style="color:var(--muted);font-size:12px">${l.notes || "—"}</td>
+      <td style="color:var(--muted);font-size:11px">${performer}</td>
+      <td style="color:var(--muted);font-size:12px">${l.created_at}</td>
+    </tr>`;
     })
     .join("");
 }
 
 function openStockLog() {
+  if (!requirePermission("inventory.adjust")) return;
   const sel = document.getElementById("sl-product");
   sel.innerHTML = db.products
     .filter((p) => p.is_active)
@@ -128,7 +128,6 @@ function saveStockLog() {
   const notes = document.getElementById("sl-notes").value;
   const expiryDate = document.getElementById("sl-expiry").value;
   const reasonId = getStockLogReasonId(reasonName);
-
   const pkgConv = getProductPackageConversion(product_id);
   const packQtyRaw = pkgConv
     ? parseFloat(document.getElementById("sl-pack-qty").value) || 0
@@ -144,7 +143,6 @@ function saveStockLog() {
   } else {
     change_qty = parseInt(document.getElementById("sl-qty").value);
   }
-
   if (!change_qty || isNaN(change_qty)) {
     showToast("Ilagay ang quantity!", "warning");
     return;
@@ -157,15 +155,18 @@ function saveStockLog() {
   let batchId = null;
   if (reasonName === "restocked" && change_qty > 0) {
     batchId = genId("stock_batches");
-    db.stock_batches.push({
+    const batch = {
       id: batchId,
       product_id,
       unit_id: p.unit_id,
       quantity_received: change_qty,
       expiration_date: expiryDate || null,
+      received_by: currentUser ? currentUser.id : null,
       created_at: todayISO(),
+      updated_at: todayISO(),
       notes,
-    });
+    };
+    db.stock_batches.push(batch);
   }
 
   const logEntry = {
@@ -174,6 +175,7 @@ function saveStockLog() {
     unit_id: p.unit_id,
     stock_batch_id: batchId,
     stock_log_reason_id: reasonId,
+    performed_by: currentUser ? currentUser.id : null,
     change_qty,
     notes,
     created_at: todayISO(),
@@ -182,8 +184,12 @@ function saveStockLog() {
     logEntry.pack_qty = packQtyUsed;
     logEntry.pieces_per_pack = piecesPerPackUsed;
   }
-
   db.stock_logs.push(logEntry);
+  addAuditLog("created", "inventory", logEntry.id, null, {
+    product_id,
+    change_qty,
+    reasonName,
+  });
   saveDb();
   closeModal("modal-stock");
   renderStockLogs();

@@ -1,15 +1,14 @@
 // ============================================================
-// SALES (new schema: sale_bundles table, sale_types lookup)
+// SALES
 // ============================================================
 function renderSales() {
   const tbody = document.getElementById("sales-body");
   const sales = [...db.sales].reverse();
   if (sales.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="7"><div class="empty-state"><p>No sales yet</p></div></td></tr>';
+      '<tr><td colspan="8"><div class="empty-state"><p>No sales yet</p></div></td></tr>';
     return;
   }
-
   tbody.innerHTML = sales
     .map((s) => {
       const items = db.sale_items.filter((i) => i.sale_id === s.id);
@@ -40,15 +39,26 @@ function renderSales() {
       const cname = customer
         ? `${customer.first_name} ${customer.last_name}`
         : "—";
-      return `<tr class="sale-row" onclick="openSaleDetail(${s.id})" title="View details">
-    <td><span class="sale-id-link">#${s.id}</span></td>
-    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${names}</td>
-    <td>${pt}</td>
-    <td>${cname}</td>
-    <td style="color:var(--accent);font-weight:700">${fmt(total)}</td>
-    <td style="color:var(--muted);font-size:12px">${s.sale_date}</td>
-    <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openSaleDetail(${s.id})">🔍 View</button></td>
-  </tr>`;
+      const status = db.sale_statuses
+        ? db.sale_statuses.find((st) => st.id === s.sale_status_id)
+        : null;
+      const statusBadge =
+        s.sale_status_id === 2
+          ? '<span class="badge badge-red">Voided</span>'
+          : s.sale_status_id === 3
+            ? '<span class="badge badge-yellow">Held</span>'
+            : "";
+      const cashier = getUserDisplayName(s.cashier_id);
+      return `<tr class="sale-row ${s.sale_status_id === 2 ? "voided-row" : ""}" onclick="openSaleDetail(${s.id})" title="View details">
+      <td><span class="sale-id-link">#${s.id}</span>${statusBadge}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${names}</td>
+      <td>${pt}</td>
+      <td>${cname}</td>
+      <td style="color:${s.sale_status_id === 2 ? "var(--muted)" : "var(--accent)"};font-weight:700;${s.sale_status_id === 2 ? "text-decoration:line-through" : ""}">${fmt(total)}</td>
+      <td style="color:var(--muted);font-size:11px">${cashier}</td>
+      <td style="color:var(--muted);font-size:12px">${s.sale_date}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openSaleDetail(${s.id})">🔍 View</button></td>
+    </tr>`;
     })
     .join("");
 }
@@ -56,7 +66,6 @@ function renderSales() {
 function openSaleDetail(saleId) {
   const s = db.sales.find((x) => x.id === saleId);
   if (!s) return;
-
   const items = db.sale_items.filter((i) => i.sale_id === saleId);
   const saleBundles = db.sale_bundles.filter((sb) => sb.sale_id === saleId);
   const itemTotal = items.reduce((a, b) => a + b.total_price, 0);
@@ -65,7 +74,6 @@ function openSaleDetail(saleId) {
     0,
   );
   const total = itemTotal + bundleTotal;
-
   const paymentType = db.payment_types.find(
     (pt) => pt.id === s.payment_type_id,
   );
@@ -73,14 +81,14 @@ function openSaleDetail(saleId) {
   const customer = s.customer_id
     ? db.customers.find((c) => c.id === s.customer_id)
     : null;
-
-  // Credit row for this sale
   const ct = db.credit.find((c) => c.sale_id === saleId);
   const creditBalance = ct ? getCreditBalance(ct) : null;
   const creditStatus = ct ? getCreditStatus(ct) : null;
+  const isVoided = s.sale_status_id === 2;
+  const cashierName = getUserDisplayName(s.cashier_id);
 
   document.getElementById("sale-detail-title").innerHTML =
-    `🧾 Sale <span style="color:var(--accent)">#${s.id}</span>`;
+    `🧾 Sale <span style="color:var(--accent)">#${s.id}</span>${isVoided ? ' <span class="badge badge-red">Voided</span>' : ""}`;
 
   const metaItems = [
     { label: "Date", value: s.sale_date },
@@ -96,12 +104,22 @@ function openSaleDetail(saleId) {
         ? `<strong>${customer.first_name} ${customer.last_name}</strong>`
         : `<span style="color:var(--muted)">Walk-in</span>`,
     },
+    { label: "Cashier", value: cashierName },
     {
       label: "Items",
       value: `${items.length + saleBundles.length} line item${items.length + saleBundles.length !== 1 ? "s" : ""}`,
     },
+    ...(isVoided
+      ? [
+          {
+            label: "Voided by",
+            value:
+              getUserDisplayName(s.voided_by) +
+              (s.void_reason ? ` — "${s.void_reason}"` : ""),
+          },
+        ]
+      : []),
   ];
-
   document.getElementById("sale-detail-meta").innerHTML = metaItems
     .map(
       (m) => `
@@ -113,13 +131,10 @@ function openSaleDetail(saleId) {
     .join("");
 
   let itemsHtml = "";
-
-  // Bundle rows from sale_bundles
   saleBundles.forEach((sb) => {
     const bundle = db.bundles.find((b) => b.id === sb.bundle_id);
     const bundleName = bundle ? bundle.bundle_name : "Unknown Bundle";
     const lineTotal = sb.unit_price * sb.quantity_sold;
-
     const sbi = db.sale_bundle_items.filter((x) => x.sale_bundle_id === sb.id);
     const bundleProductLines = sbi
       .map((x) => {
@@ -127,13 +142,11 @@ function openSaleDetail(saleId) {
         const u = db.units.find((u) => u.id === x.unit_id);
         return p
           ? `<div style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 28px;font-size:12px;color:var(--muted);">
-               <span>${p.image_url}</span><span>${p.name}</span>
-               <span style="margin-left:auto;">×${x.quantity_deducted}${u ? " " + u.abbreviation : ""}</span>
-             </div>`
+        <span>${p.image_url}</span><span>${p.name}</span>
+        <span style="margin-left:auto;">×${x.quantity_deducted}${u ? " " + u.abbreviation : ""}</span></div>`
           : "";
       })
       .join("");
-
     itemsHtml += `
       <div class="sale-detail-row">
         <div style="display:flex;align-items:center;gap:10px;">
@@ -150,15 +163,12 @@ function openSaleDetail(saleId) {
         </div>
       </div>`;
   });
-
-  // Product rows from sale_items
   items.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
     const u = db.units.find((x) => x.id === item.unit_id);
     const productName = p ? p.name : "Unknown Product";
     const emoji = p ? p.image_url : "📦";
     const unitLabel = u ? u.abbreviation : "";
-    // sale_type: support both string and id
     const saleTypeStr =
       typeof item.sale_type === "number"
         ? getSaleTypeName(item.sale_type)
@@ -167,16 +177,13 @@ function openSaleDetail(saleId) {
       saleTypeStr === "wholesale"
         ? `<span class="tag" style="font-size:10px;">Wholesale</span>`
         : "";
-
     itemsHtml += `
       <div class="sale-detail-row">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:22px;">${emoji}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;">${productName} ${saleTypeBadge}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-              ${fmt(item.unit_price)} × ${item.quantity_sold}${unitLabel ? " " + unitLabel : ""}
-            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">${fmt(item.unit_price)} × ${item.quantity_sold}${unitLabel ? " " + unitLabel : ""}</div>
           </div>
           <div style="text-align:right;flex-shrink:0;margin-left:12px;">
             <div style="font-weight:700;color:var(--accent);">${fmt(item.total_price)}</div>
@@ -184,7 +191,6 @@ function openSaleDetail(saleId) {
         </div>
       </div>`;
   });
-
   document.getElementById("sale-detail-items").innerHTML =
     itemsHtml ||
     `<div style="padding:20px;text-align:center;color:var(--muted);">No items found.</div>`;
@@ -194,6 +200,10 @@ function openSaleDetail(saleId) {
       <span style="font-size:13px;font-weight:600;color:var(--muted);">TOTAL</span>
       <span style="font-size:20px;font-weight:800;color:var(--accent);">${fmt(total)}</span>
     </div>`;
+
+  if (!isVoided && can("sales.void")) {
+    footerHtml += `<button class="btn btn-danger btn-sm" style="margin-top:12px;width:100%;justify-content:center;" onclick="voidSale(${s.id})">🚫 Void this Sale</button>`;
+  }
 
   if (ct) {
     const statusColor = {
@@ -210,22 +220,88 @@ function openSaleDetail(saleId) {
     footerHtml += `
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
         <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Utang Status</div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-          <span style="color:var(--muted);">Original amount</span><span style="font-weight:600;">${fmt(ct.amount_owed)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-          <span style="color:var(--muted);">Amount paid</span><span style="font-weight:600;color:var(--green);">${fmt(paidAmount)}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;">
-          <span style="color:var(--muted);">Remaining balance</span><span style="font-weight:700;color:${statusColor};">${fmt(creditBalance)}</span>
-        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span style="color:var(--muted);">Original amount</span><span style="font-weight:600;">${fmt(ct.amount_owed)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span style="color:var(--muted);">Amount paid</span><span style="font-weight:600;color:var(--green);">${fmt(paidAmount)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;"><span style="color:var(--muted);">Remaining balance</span><span style="font-weight:700;color:${statusColor};">${fmt(creditBalance)}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <span style="font-size:12px;font-weight:700;color:${statusColor};">${statusLabel}</span>
-          ${creditStatus !== "paid" ? `<button class="btn btn-success btn-sm" onclick="closeModal('modal-sale-detail');openPayUtang(${ct.id})">💰 Bayad</button>` : ""}
+          ${creditStatus !== "paid" && can("customers.credit") ? `<button class="btn btn-success btn-sm" onclick="closeModal('modal-sale-detail');openPayUtang(${ct.id})">💰 Bayad</button>` : ""}
         </div>
       </div>`;
   }
-
   document.getElementById("sale-detail-footer").innerHTML = footerHtml;
   openModal("modal-sale-detail");
+}
+
+function voidSale(saleId) {
+  if (!requirePermission("sales.void")) return;
+  const reason = prompt("Reason for voiding this sale (required):");
+  if (!reason || !reason.trim()) {
+    showToast("Ilagay ang reason para i-void!", "warning");
+    return;
+  }
+  if (!confirm(`Sigurado ka bang gusto mong i-void ang Sale #${saleId}?`))
+    return;
+
+  const s = db.sales.find((x) => x.id === saleId);
+  const old = { sale_status_id: s.sale_status_id };
+  s.sale_status_id = 2; // voided
+  s.voided_by = currentUser ? currentUser.id : null;
+  s.voided_at = new Date().toISOString();
+  s.void_reason = reason.trim();
+
+  // Restore stock
+  const items = db.sale_items.filter((i) => i.sale_id === saleId);
+  items.forEach((item) => {
+    const p = db.products.find((x) => x.id === item.product_id);
+    if (!p) return;
+    const baseQty = convertToBaseUnits(
+      item.quantity_sold,
+      item.unit_id,
+      p.unit_id,
+      p.id,
+    );
+    p.stock_quantity = parseFloat((p.stock_quantity + baseQty).toFixed(4));
+    db.stock_logs.push({
+      id: genId("stock_logs"),
+      product_id: p.id,
+      unit_id: item.unit_id,
+      stock_batch_id: null,
+      stock_log_reason_id: getStockLogReasonId("adjustment"),
+      performed_by: currentUser ? currentUser.id : null,
+      change_qty: baseQty,
+      notes: `Void Sale #${saleId} — ${reason}`,
+      created_at: todayISO(),
+    });
+  });
+
+  const saleBundlesList = db.sale_bundles.filter((sb) => sb.sale_id === saleId);
+  saleBundlesList.forEach((sb) => {
+    const sbi = db.sale_bundle_items.filter((x) => x.sale_bundle_id === sb.id);
+    sbi.forEach((x) => {
+      const p = db.products.find((pr) => pr.id === x.product_id);
+      if (!p) return;
+      p.stock_quantity += x.quantity_deducted;
+      db.stock_logs.push({
+        id: genId("stock_logs"),
+        product_id: p.id,
+        unit_id: p.unit_id,
+        stock_batch_id: null,
+        stock_log_reason_id: getStockLogReasonId("adjustment"),
+        performed_by: currentUser ? currentUser.id : null,
+        change_qty: x.quantity_deducted,
+        notes: `Void Sale #${saleId} — ${reason}`,
+        created_at: todayISO(),
+      });
+    });
+  });
+
+  addAuditLog("voided", "sales", saleId, old, {
+    sale_status_id: 2,
+    void_reason: reason,
+  });
+  saveDb();
+  closeModal("modal-sale-detail");
+  renderSales();
+  showToast(`Sale #${saleId} na-void!`, "warning");
 }

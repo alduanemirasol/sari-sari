@@ -1,11 +1,10 @@
 // ============================================================
-// DATA STORE — New Schema (new_schema.txt)
+// DATA STORE — Updated Schema (multi-user + RBAC)
 // Persisted to localStorage under the key "tindahan_db"
 // ============================================================
 
 const DB_KEY = "tindahan_db";
 
-/** Seed / factory-reset data */
 const DEFAULT_DB = {
   product_categories: [
     { id: 1, name: "Candy" },
@@ -40,12 +39,24 @@ const DEFAULT_DB = {
     { id: 1, name: "retail" },
     { id: 2, name: "wholesale" },
   ],
+  sale_statuses: [
+    { id: 1, name: "completed" },
+    { id: 2, name: "voided" },
+    { id: 3, name: "held" },
+  ],
+  return_reasons: [
+    { id: 1, name: "defective" },
+    { id: 2, name: "wrong_item" },
+    { id: 3, name: "customer_changed_mind" },
+    { id: 4, name: "expired" },
+  ],
   stock_log_reasons: [
     { id: 1, name: "restocked" },
     { id: 2, name: "sold" },
     { id: 3, name: "damaged" },
     { id: 4, name: "expired" },
     { id: 5, name: "adjustment" },
+    { id: 6, name: "returned" },
   ],
   units: [
     { id: 1, name: "piece", abbreviation: "pc" },
@@ -55,27 +66,274 @@ const DEFAULT_DB = {
     { id: 5, name: "gram", abbreviation: "g" },
     { id: 6, name: "pack", abbreviation: "pk" },
   ],
-  // unit_conversions now has optional product_id for product-specific conversions
   unit_conversions: [
     { id: 1, product_id: null, from_unit_id: 2, to_unit_id: 3, factor: 1000 },
     { id: 2, product_id: null, from_unit_id: 4, to_unit_id: 5, factor: 1000 },
   ],
+
+  // ── RBAC ──────────────────────────────────────────────────
+  roles: [
+    {
+      id: 1,
+      name: "owner",
+      description: "Full access. Manages users, roles, and all data.",
+      is_active: true,
+    },
+    {
+      id: 2,
+      name: "manager",
+      description: "Reports, inventory, sales. No user/role management.",
+      is_active: true,
+    },
+    {
+      id: 3,
+      name: "cashier",
+      description: "POS sales only. No reports or settings.",
+      is_active: true,
+    },
+    {
+      id: 4,
+      name: "inventory_clerk",
+      description: "Manage stock and products. No sales or financials.",
+      is_active: true,
+    },
+    {
+      id: 5,
+      name: "viewer",
+      description: "Read-only access to reports and inventory.",
+      is_active: true,
+    },
+  ],
+  permissions: [
+    { id: 1, module: "sales", action: "view", name: "View Sales History" },
+    { id: 2, module: "sales", action: "create", name: "Process Sales (POS)" },
+    { id: 3, module: "sales", action: "void", name: "Void a Sale" },
+    {
+      id: 4,
+      module: "sales",
+      action: "apply_discount",
+      name: "Apply Manual Discounts",
+    },
+    {
+      id: 5,
+      module: "sales",
+      action: "hold",
+      name: "Hold / Park a Transaction",
+    },
+    {
+      id: 6,
+      module: "sales",
+      action: "return",
+      name: "Process Returns & Refunds",
+    },
+    {
+      id: 7,
+      module: "inventory",
+      action: "view",
+      name: "View Stock & Products",
+    },
+    {
+      id: 8,
+      module: "inventory",
+      action: "create",
+      name: "Receive Stock Batches",
+    },
+    {
+      id: 9,
+      module: "inventory",
+      action: "edit",
+      name: "Edit Products & Pricing",
+    },
+    {
+      id: 10,
+      module: "inventory",
+      action: "adjust",
+      name: "Manual Stock Adjustments",
+    },
+    {
+      id: 11,
+      module: "inventory",
+      action: "delete",
+      name: "Deactivate Products",
+    },
+    { id: 12, module: "customers", action: "view", name: "View Customers" },
+    { id: 13, module: "customers", action: "create", name: "Add Customers" },
+    { id: 14, module: "customers", action: "edit", name: "Edit Customers" },
+    {
+      id: 15,
+      module: "customers",
+      action: "delete",
+      name: "Deactivate Customers",
+    },
+    {
+      id: 16,
+      module: "customers",
+      action: "credit",
+      name: "Manage Credit/Utang",
+    },
+    { id: 17, module: "expenses", action: "view", name: "View Expenses" },
+    { id: 18, module: "expenses", action: "create", name: "Log Expenses" },
+    { id: 19, module: "expenses", action: "edit", name: "Edit Expenses" },
+    { id: 20, module: "expenses", action: "delete", name: "Delete Expenses" },
+    { id: 21, module: "reports", action: "sales", name: "Sales Reports" },
+    {
+      id: 22,
+      module: "reports",
+      action: "inventory",
+      name: "Inventory Reports",
+    },
+    {
+      id: 23,
+      module: "reports",
+      action: "financial",
+      name: "Financial Reports (P&L)",
+    },
+    {
+      id: 24,
+      module: "reports",
+      action: "credit",
+      name: "Credit & Receivables Report",
+    },
+    { id: 25, module: "reports", action: "audit", name: "View Audit Logs" },
+    { id: 26, module: "users", action: "view", name: "View User Accounts" },
+    { id: 27, module: "users", action: "create", name: "Add Users" },
+    {
+      id: 28,
+      module: "users",
+      action: "edit",
+      name: "Edit Users & Reset Passwords",
+    },
+    { id: 29, module: "users", action: "delete", name: "Deactivate Users" },
+    {
+      id: 30,
+      module: "roles",
+      action: "manage",
+      name: "Manage Roles & Permissions",
+    },
+    { id: 31, module: "sessions", action: "open", name: "Open a POS Shift" },
+    { id: 32, module: "sessions", action: "close", name: "Close a POS Shift" },
+    {
+      id: 33,
+      module: "sessions",
+      action: "view_others",
+      name: "View Other Users' Sessions",
+    },
+    {
+      id: 34,
+      module: "settings",
+      action: "manage",
+      name: "Manage System Settings",
+    },
+  ],
+  role_permissions: [
+    // owner — all permissions 1-34
+    ...Array.from({ length: 34 }, (_, i) => ({
+      id: i + 1,
+      role_id: 1,
+      permission_id: i + 1,
+    })),
+    // manager
+    { id: 35, role_id: 2, permission_id: 1 },
+    { id: 36, role_id: 2, permission_id: 2 },
+    { id: 37, role_id: 2, permission_id: 3 },
+    { id: 38, role_id: 2, permission_id: 4 },
+    { id: 39, role_id: 2, permission_id: 5 },
+    { id: 40, role_id: 2, permission_id: 6 },
+    { id: 41, role_id: 2, permission_id: 7 },
+    { id: 42, role_id: 2, permission_id: 8 },
+    { id: 43, role_id: 2, permission_id: 9 },
+    { id: 44, role_id: 2, permission_id: 10 },
+    { id: 45, role_id: 2, permission_id: 12 },
+    { id: 46, role_id: 2, permission_id: 13 },
+    { id: 47, role_id: 2, permission_id: 14 },
+    { id: 48, role_id: 2, permission_id: 16 },
+    { id: 49, role_id: 2, permission_id: 17 },
+    { id: 50, role_id: 2, permission_id: 18 },
+    { id: 51, role_id: 2, permission_id: 19 },
+    { id: 52, role_id: 2, permission_id: 21 },
+    { id: 53, role_id: 2, permission_id: 22 },
+    { id: 54, role_id: 2, permission_id: 23 },
+    { id: 55, role_id: 2, permission_id: 24 },
+    { id: 56, role_id: 2, permission_id: 26 },
+    { id: 57, role_id: 2, permission_id: 31 },
+    { id: 58, role_id: 2, permission_id: 32 },
+    { id: 59, role_id: 2, permission_id: 33 },
+    // cashier
+    { id: 60, role_id: 3, permission_id: 1 },
+    { id: 61, role_id: 3, permission_id: 2 },
+    { id: 62, role_id: 3, permission_id: 5 },
+    { id: 63, role_id: 3, permission_id: 12 },
+    { id: 64, role_id: 3, permission_id: 13 },
+    { id: 65, role_id: 3, permission_id: 16 },
+    { id: 66, role_id: 3, permission_id: 31 },
+    { id: 67, role_id: 3, permission_id: 32 },
+    // inventory_clerk
+    { id: 68, role_id: 4, permission_id: 7 },
+    { id: 69, role_id: 4, permission_id: 8 },
+    { id: 70, role_id: 4, permission_id: 9 },
+    { id: 71, role_id: 4, permission_id: 10 },
+    { id: 72, role_id: 4, permission_id: 22 },
+    // viewer
+    { id: 73, role_id: 5, permission_id: 1 },
+    { id: 74, role_id: 5, permission_id: 7 },
+    { id: 75, role_id: 5, permission_id: 12 },
+    { id: 76, role_id: 5, permission_id: 17 },
+    { id: 77, role_id: 5, permission_id: 21 },
+    { id: 78, role_id: 5, permission_id: 22 },
+    { id: 79, role_id: 5, permission_id: 24 },
+  ],
+
+  // Default admin — password "admin123", pin "1234" (demo only, not bcrypt)
+  users: [
+    {
+      id: 1,
+      role_id: 1,
+      first_name: "Admin",
+      last_name: "Owner",
+      username: "admin",
+      email: "admin@tindahan.local",
+      password_hash: "admin123",
+      pin_hash: "1234",
+      is_active: true,
+      must_change_password: false,
+      last_login_at: null,
+      created_by: null,
+      created_at: "2025-01-01",
+      updated_at: "2025-01-01",
+    },
+  ],
+  user_sessions: [],
+  password_reset_tokens: [],
+  audit_logs: [],
+
+  // ── Shifts ────────────────────────────────────────────────
+  pos_sessions: [],
+  session_cash_movements: [],
+
+  // ── Products / Stock ──────────────────────────────────────
   product_package_conversions: [],
   products: [],
-  // product_pricing: unit_id + label support multi-unit pricing rows
   product_pricing: [],
   bundles: [],
   bundle_items: [],
+  stock_batches: [],
+  stock_logs: [],
+
+  // ── Customers ─────────────────────────────────────────────
   customers: [],
+
+  // ── Sales ─────────────────────────────────────────────────
   sales: [],
   sale_items: [],
-  sale_bundles: [], // bundle sale header rows
-  sale_bundle_items: [], // per-product deductions for bundle sales
-  credit: [], // renamed from credit_transactions
+  sale_bundles: [],
+  sale_bundle_items: [],
+  sale_returns: [],
+  sale_return_items: [],
+
+  // ── Credit / Expenses ─────────────────────────────────────
+  credit: [],
   credit_payments: [],
   expenses: [],
-  stock_logs: [],
-  stock_batches: [],
 
   nextId: {
     products: 1,
@@ -88,6 +346,8 @@ const DEFAULT_DB = {
     sale_items: 1,
     sale_bundles: 1,
     sale_bundle_items: 1,
+    sale_returns: 1,
+    sale_return_items: 1,
     credit: 1,
     credit_payments: 1,
     expenses: 1,
@@ -95,5 +355,12 @@ const DEFAULT_DB = {
     stock_batches: 1,
     unit_conversions: 3,
     units: 7,
+    users: 2,
+    user_sessions: 1,
+    password_reset_tokens: 1,
+    audit_logs: 1,
+    pos_sessions: 1,
+    session_cash_movements: 1,
+    role_permissions: 80,
   },
 };
