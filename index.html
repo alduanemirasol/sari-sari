@@ -802,9 +802,28 @@
     <!-- TOAST CONTAINER -->
     <div class="toast-container" id="toast-container"></div>
 
-    <!-- Scripts: data must load before app logic -->
-    <script src="data.js"></script>
-    <script src="script.js"></script>
+    <!-- Data layer: seed data → store → helpers → state -->
+    <script src="js/db-seed.js"></script>
+    <script src="js/db-store.js"></script>
+    <script src="js/db-helpers.js"></script>
+    <script src="js/app-state.js"></script>
+
+    <!-- Shared utilities (fmt, showToast, showPage, clock, etc.) -->
+    <script src="js/utils.js"></script>
+
+    <!-- Page modules -->
+    <script src="js/dashboard.js"></script>
+    <script src="js/pos.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/bundles.js"></script>
+    <script src="js/stocklogs.js"></script>
+    <script src="js/sales.js"></script>
+    <script src="js/credits.js"></script>
+    <script src="js/expenses.js"></script>
+    <script src="js/customers.js"></script>
+
+    <!-- App init (must be last) -->
+    <script src="js/app.js"></script>
 
 </body>
 
