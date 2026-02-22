@@ -60,6 +60,13 @@ function showPage(name, el) {
     customers: "Customers",
   }[name];
   refreshPage(name);
+  // Close mobile sidebar when navigating
+  if (typeof closeSidebar === "function") closeSidebar();
+  // Collapse mobile cart when leaving POS
+  const posCart = document.querySelector(".pos-right");
+  if (posCart && name !== "pos") {
+    posCart.classList.remove("cart-expanded");
+  }
 }
 
 function refreshPage(name) {
@@ -92,3 +99,27 @@ function updateClock() {
 }
 setInterval(updateClock, 1000);
 updateClock();
+
+// ============================================================
+// SIDEBAR — mobile drawer toggle
+// ============================================================
+function toggleSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  const isOpen = sidebar.classList.contains("open");
+  if (isOpen) {
+    closeSidebar();
+  } else {
+    sidebar.classList.add("open");
+    overlay.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+}
+
+function closeSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  sidebar.classList.remove("open");
+  overlay.classList.remove("open");
+  document.body.style.overflow = "";
+}

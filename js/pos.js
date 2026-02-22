@@ -697,3 +697,35 @@ function showReceipt(items, total, payType, customerId, date) {
   document.getElementById("receipt-content").innerHTML = html;
   openModal("modal-receipt");
 }
+
+// ============================================================
+// MOBILE CART DRAWER TOGGLE
+// ============================================================
+function toggleMobileCart() {
+  const cart = document.querySelector(".pos-right");
+  if (!cart) return;
+  cart.classList.toggle("cart-expanded");
+}
+
+// Wire the cart header click for mobile
+document.addEventListener("DOMContentLoaded", function () {
+  const cartHeader = document.querySelector(".cart-header");
+  if (cartHeader) {
+    cartHeader.addEventListener("click", function (e) {
+      // Only toggle on tablet/mobile (when pos-right is fixed)
+      if (window.innerWidth <= 1024) {
+        toggleMobileCart();
+      }
+    });
+  }
+});
+
+// When cart contents change, auto-expand if items added on mobile
+function maybeExpandMobileCart() {
+  if (window.innerWidth <= 1024) {
+    const cartEl = document.querySelector(".pos-right");
+    if (cartEl && (cart.length > 0 || cartBundles.length > 0)) {
+      cartEl.classList.add("cart-expanded");
+    }
+  }
+}

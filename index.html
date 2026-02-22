@@ -12,8 +12,11 @@
 
 <body>
 
+    <!-- Sidebar overlay (mobile backdrop) -->
+    <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
     <!-- SIDEBAR -->
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
         <div class="logo">
             <h1>🏪 Tindahan<br>ni Duane</h1>
             <span>Sari-Sari Store POS</span>
@@ -64,7 +67,12 @@
     <!-- MAIN -->
     <div class="main">
         <div class="topbar">
-            <h2 id="page-title">Dashboard</h2>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+                    <span></span><span></span><span></span>
+                </button>
+                <h2 id="page-title">Dashboard</h2>
+            </div>
             <div class="topbar-right">
                 <span id="clock" style="font-size:13px;color:var(--muted)"></span>
             </div>
