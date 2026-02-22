@@ -1,7 +1,6 @@
 // ============================================================
-// DASHBOARD
+// DASHBOARD (new schema: db.credit instead of db.credit_transactions)
 // ============================================================
-
 function renderDashboard() {
   const today = new Date().toDateString();
   const todaySales = db.sales.filter(
@@ -12,14 +11,14 @@ function renderDashboard() {
       sum +
       db.sale_items
         .filter((i) => i.sale_id === s.id)
-        .reduce((a, b) => a + b.total_price, 0)
+        .reduce((a, b) => a + b.total_price, 0) +
+      db.sale_bundles
+        .filter((sb) => sb.sale_id === s.id)
+        .reduce((a, b) => a + b.unit_price * b.quantity_sold, 0)
     );
   }, 0);
 
-  // Use helper functions for credit balance
-  const unpaidCTs = db.credit_transactions.filter(
-    (ct) => getCreditBalance(ct) > 0,
-  );
+  const unpaidCTs = db.credit.filter((ct) => getCreditBalance(ct) > 0);
   const totalUtang = unpaidCTs.reduce(
     (sum, ct) => sum + getCreditBalance(ct),
     0,
@@ -38,7 +37,6 @@ function renderDashboard() {
     uniqueDebtors + " customers";
   document.getElementById("stat-lowstock").textContent = lowStock.length;
 
-  // Recent sales
   const tbody = document.getElementById("dashboard-sales-body");
   const recent = [...db.sales].reverse().slice(0, 5);
   if (recent.length === 0) {
@@ -48,17 +46,20 @@ function renderDashboard() {
     tbody.innerHTML = recent
       .map((s) => {
         const items = db.sale_items.filter((i) => i.sale_id === s.id);
-        const total = items.reduce((a, b) => a + b.total_price, 0);
-        const names = items
-          .map((i) => {
-            if (i.bundle_id) {
-              const b = db.bundles.find((x) => x.id === i.bundle_id);
-              return b ? `🎁 ${b.bundle_name}` : "?";
-            }
+        const bundles = db.sale_bundles.filter((sb) => sb.sale_id === s.id);
+        const total =
+          items.reduce((a, b) => a + b.total_price, 0) +
+          bundles.reduce((a, b) => a + b.unit_price * b.quantity_sold, 0);
+        const names = [
+          ...items.map((i) => {
             const p = db.products.find((x) => x.id === i.product_id);
             return p ? p.name : "?";
-          })
-          .join(", ");
+          }),
+          ...bundles.map((sb) => {
+            const b = db.bundles.find((x) => x.id === sb.bundle_id);
+            return b ? `🎁 ${b.bundle_name}` : "?";
+          }),
+        ].join(", ");
         const paymentType = db.payment_types.find(
           (pt) => pt.id === s.payment_type_id,
         );
@@ -71,7 +72,6 @@ function renderDashboard() {
       .join("");
   }
 
-  // Low stock
   const lsBody = document.getElementById("low-stock-body");
   if (lowStock.length === 0) {
     lsBody.innerHTML =

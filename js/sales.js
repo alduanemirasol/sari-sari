@@ -1,5 +1,5 @@
 // ============================================================
-// SALES
+// SALES (new schema: sale_bundles table, sale_types lookup)
 // ============================================================
 function renderSales() {
   const tbody = document.getElementById("sales-body");
@@ -13,17 +13,20 @@ function renderSales() {
   tbody.innerHTML = sales
     .map((s) => {
       const items = db.sale_items.filter((i) => i.sale_id === s.id);
-      const total = items.reduce((a, b) => a + b.total_price, 0);
-      const names = items
-        .map((i) => {
-          if (i.bundle_id) {
-            const b = db.bundles.find((x) => x.id === i.bundle_id);
-            return b ? `🎁 ${b.bundle_name}` : "?";
-          }
+      const bundles = db.sale_bundles.filter((sb) => sb.sale_id === s.id);
+      const total =
+        items.reduce((a, b) => a + b.total_price, 0) +
+        bundles.reduce((a, b) => a + b.unit_price * b.quantity_sold, 0);
+      const names = [
+        ...items.map((i) => {
           const p = db.products.find((x) => x.id === i.product_id);
           return p ? p.name : "?";
-        })
-        .join(", ");
+        }),
+        ...bundles.map((sb) => {
+          const b = db.bundles.find((x) => x.id === sb.bundle_id);
+          return b ? `🎁 ${b.bundle_name}` : "?";
+        }),
+      ].join(", ");
       const paymentType = db.payment_types.find(
         (pt) => pt.id === s.payment_type_id,
       );
@@ -55,7 +58,14 @@ function openSaleDetail(saleId) {
   if (!s) return;
 
   const items = db.sale_items.filter((i) => i.sale_id === saleId);
-  const total = items.reduce((a, b) => a + b.total_price, 0);
+  const saleBundles = db.sale_bundles.filter((sb) => sb.sale_id === saleId);
+  const itemTotal = items.reduce((a, b) => a + b.total_price, 0);
+  const bundleTotal = saleBundles.reduce(
+    (a, b) => a + b.unit_price * b.quantity_sold,
+    0,
+  );
+  const total = itemTotal + bundleTotal;
+
   const paymentType = db.payment_types.find(
     (pt) => pt.id === s.payment_type_id,
   );
@@ -64,16 +74,14 @@ function openSaleDetail(saleId) {
     ? db.customers.find((c) => c.id === s.customer_id)
     : null;
 
-  // Credit transaction for this sale (if any)
-  const ct = db.credit_transactions.find((c) => c.sale_id === saleId);
+  // Credit row for this sale
+  const ct = db.credit.find((c) => c.sale_id === saleId);
   const creditBalance = ct ? getCreditBalance(ct) : null;
   const creditStatus = ct ? getCreditStatus(ct) : null;
 
-  // ── Modal title ────────────────────────────────────────────
   document.getElementById("sale-detail-title").innerHTML =
     `🧾 Sale <span style="color:var(--accent)">#${s.id}</span>`;
 
-  // ── Meta grid (top info bar) ───────────────────────────────
   const metaItems = [
     { label: "Date", value: s.sale_date },
     {
@@ -90,7 +98,7 @@ function openSaleDetail(saleId) {
     },
     {
       label: "Items",
-      value: `${items.length} line item${items.length !== 1 ? "s" : ""}`,
+      value: `${items.length + saleBundles.length} line item${items.length + saleBundles.length !== 1 ? "s" : ""}`,
     },
   ];
 
@@ -104,79 +112,83 @@ function openSaleDetail(saleId) {
     )
     .join("");
 
-  // ── Line items ─────────────────────────────────────────────
   let itemsHtml = "";
-  items.forEach((item) => {
-    if (item.bundle_id) {
-      const bundle = db.bundles.find((b) => b.id === item.bundle_id);
-      const bundleName = bundle ? bundle.bundle_name : "Unknown Bundle";
 
-      const sbi = db.sale_bundle_items.filter(
-        (x) => x.sale_item_id === item.id,
-      );
-      const bundleProductLines = sbi
-        .map((x) => {
-          const p = db.products.find((pr) => pr.id === x.product_id);
-          const u = db.units.find((u) => u.id === x.unit_id);
-          return p
-            ? `<div style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 28px;font-size:12px;color:var(--muted);">
-               <span>${p.image_url}</span>
-               <span>${p.name}</span>
+  // Bundle rows from sale_bundles
+  saleBundles.forEach((sb) => {
+    const bundle = db.bundles.find((b) => b.id === sb.bundle_id);
+    const bundleName = bundle ? bundle.bundle_name : "Unknown Bundle";
+    const lineTotal = sb.unit_price * sb.quantity_sold;
+
+    const sbi = db.sale_bundle_items.filter((x) => x.sale_bundle_id === sb.id);
+    const bundleProductLines = sbi
+      .map((x) => {
+        const p = db.products.find((pr) => pr.id === x.product_id);
+        const u = db.units.find((u) => u.id === x.unit_id);
+        return p
+          ? `<div style="display:flex;align-items:center;gap:6px;padding:3px 0 3px 28px;font-size:12px;color:var(--muted);">
+               <span>${p.image_url}</span><span>${p.name}</span>
                <span style="margin-left:auto;">×${x.quantity_deducted}${u ? " " + u.abbreviation : ""}</span>
              </div>`
-            : "";
-        })
-        .join("");
-
-      itemsHtml += `
-        <div class="sale-detail-row">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:22px;">🎁</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;">${bundleName} <span class="bundle-tag">Bundle</span></div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;">×${item.quantity_sold} bundle${item.quantity_sold > 1 ? "s" : ""}</div>
-              ${bundleProductLines}
-            </div>
-            <div style="text-align:right;flex-shrink:0;margin-left:12px;">
-              <div style="font-weight:700;color:var(--accent);">${fmt(item.total_price)}</div>
-              <div style="font-size:11px;color:var(--muted);">${fmt(item.unit_price)} each</div>
-            </div>
-          </div>
-        </div>`;
-    } else {
-      const p = db.products.find((x) => x.id === item.product_id);
-      const u = db.units.find((x) => x.id === item.unit_id);
-      const productName = p ? p.name : "Unknown Product";
-      const emoji = p ? p.image_url : "📦";
-      const unitLabel = u ? u.abbreviation : "";
-      const saleTypeBadge =
-        item.sale_type === "wholesale"
-          ? `<span class="tag" style="font-size:10px;">Wholesale</span>`
           : "";
+      })
+      .join("");
 
-      itemsHtml += `
-        <div class="sale-detail-row">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:22px;">${emoji}</span>
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;">${productName} ${saleTypeBadge}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-                ${fmt(item.unit_price)} × ${item.quantity_sold}${unitLabel ? " " + unitLabel : ""}
-              </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;margin-left:12px;">
-              <div style="font-weight:700;color:var(--accent);">${fmt(item.total_price)}</div>
+    itemsHtml += `
+      <div class="sale-detail-row">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;">🎁</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;">${bundleName} <span class="bundle-tag">Bundle</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">×${sb.quantity_sold} bundle${sb.quantity_sold > 1 ? "s" : ""}</div>
+            ${bundleProductLines}
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-left:12px;">
+            <div style="font-weight:700;color:var(--accent);">${fmt(lineTotal)}</div>
+            <div style="font-size:11px;color:var(--muted);">${fmt(sb.unit_price)} each</div>
+          </div>
+        </div>
+      </div>`;
+  });
+
+  // Product rows from sale_items
+  items.forEach((item) => {
+    const p = db.products.find((x) => x.id === item.product_id);
+    const u = db.units.find((x) => x.id === item.unit_id);
+    const productName = p ? p.name : "Unknown Product";
+    const emoji = p ? p.image_url : "📦";
+    const unitLabel = u ? u.abbreviation : "";
+    // sale_type: support both string and id
+    const saleTypeStr =
+      typeof item.sale_type === "number"
+        ? getSaleTypeName(item.sale_type)
+        : item.sale_type || "retail";
+    const saleTypeBadge =
+      saleTypeStr === "wholesale"
+        ? `<span class="tag" style="font-size:10px;">Wholesale</span>`
+        : "";
+
+    itemsHtml += `
+      <div class="sale-detail-row">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;">${emoji}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;">${productName} ${saleTypeBadge}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+              ${fmt(item.unit_price)} × ${item.quantity_sold}${unitLabel ? " " + unitLabel : ""}
             </div>
           </div>
-        </div>`;
-    }
+          <div style="text-align:right;flex-shrink:0;margin-left:12px;">
+            <div style="font-weight:700;color:var(--accent);">${fmt(item.total_price)}</div>
+          </div>
+        </div>
+      </div>`;
   });
 
   document.getElementById("sale-detail-items").innerHTML =
     itemsHtml ||
     `<div style="padding:20px;text-align:center;color:var(--muted);">No items found.</div>`;
 
-  // ── Footer: total + credit status ─────────────────────────
   let footerHtml = `
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <span style="font-size:13px;font-weight:600;color:var(--muted);">TOTAL</span>
@@ -199,16 +211,13 @@ function openSaleDetail(saleId) {
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
         <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Utang Status</div>
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-          <span style="color:var(--muted);">Original amount</span>
-          <span style="font-weight:600;">${fmt(ct.amount_owed)}</span>
+          <span style="color:var(--muted);">Original amount</span><span style="font-weight:600;">${fmt(ct.amount_owed)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;">
-          <span style="color:var(--muted);">Amount paid</span>
-          <span style="font-weight:600;color:var(--green);">${fmt(paidAmount)}</span>
+          <span style="color:var(--muted);">Amount paid</span><span style="font-weight:600;color:var(--green);">${fmt(paidAmount)}</span>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px;">
-          <span style="color:var(--muted);">Remaining balance</span>
-          <span style="font-weight:700;color:${statusColor};">${fmt(creditBalance)}</span>
+          <span style="color:var(--muted);">Remaining balance</span><span style="font-weight:700;color:${statusColor};">${fmt(creditBalance)}</span>
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <span style="font-size:12px;font-weight:700;color:${statusColor};">${statusLabel}</span>

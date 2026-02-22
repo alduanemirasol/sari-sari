@@ -1,36 +1,77 @@
 // ============================================================
-// DB HELPERS — schema query helpers
-// Depends on: db-store.js (db)
+// DB HELPERS — schema query helpers (new_schema.txt)
 // ============================================================
 
-/** Get all sellable unit options for a product (from product_units table) */
-function getProductUnitOptions(product_id) {
-  return db.product_units.filter((pu) => pu.product_id === product_id);
-}
-
-/** Get a specific product_unit row by product_id + unit_id */
-function getProductUnitPricing(product_id, unit_id) {
-  return (
-    db.product_units.find(
-      (pu) => pu.product_id === product_id && pu.unit_id === unit_id,
-    ) || null
-  );
-}
-
-/** Get the current (latest) pricing for a product */
+/** Get the current (latest) pricing for a product (base unit row: unit_id = null or matches product.unit_id) */
 function getProductPricing(product_id) {
+  const p = db.products.find((x) => x.id === product_id);
+  const baseUnitId = p ? p.unit_id : null;
   const rows = db.product_pricing
-    .filter((p) => p.product_id === product_id)
+    .filter(
+      (pp) =>
+        pp.product_id === product_id &&
+        (pp.unit_id === null ||
+          pp.unit_id === baseUnitId ||
+          pp.unit_id === undefined),
+    )
     .sort((a, b) => b.effective_date.localeCompare(a.effective_date));
-  return rows[0] || null;
+  // Fallback: any row for this product
+  if (rows.length === 0) {
+    const all = db.product_pricing
+      .filter((pp) => pp.product_id === product_id)
+      .sort((a, b) => b.effective_date.localeCompare(a.effective_date));
+    return all[0] || null;
+  }
+  return rows[0];
 }
 
-/** Get the pricing that was active on a given ISO date string */
+/** Get pricing active on a given ISO date for the base unit */
 function getProductPricingAt(product_id, dateStr) {
+  const p = db.products.find((x) => x.id === product_id);
+  const baseUnitId = p ? p.unit_id : null;
   const rows = db.product_pricing
-    .filter((p) => p.product_id === product_id && p.effective_date <= dateStr)
+    .filter(
+      (pp) =>
+        pp.product_id === product_id &&
+        (pp.unit_id === null ||
+          pp.unit_id === baseUnitId ||
+          pp.unit_id === undefined) &&
+        pp.effective_date <= dateStr,
+    )
     .sort((a, b) => b.effective_date.localeCompare(a.effective_date));
   return rows[0] || getProductPricing(product_id);
+}
+
+/**
+ * Get all additional (non-base) unit pricing rows for a product.
+ * These are product_pricing rows where unit_id differs from the product's base unit_id.
+ */
+function getProductUnitOptions(product_id) {
+  const p = db.products.find((x) => x.id === product_id);
+  if (!p) return [];
+  const baseUnitId = p.unit_id;
+  // Get the latest pricing row per unit_id (non-base units only)
+  const unitMap = {};
+  db.product_pricing
+    .filter(
+      (pp) =>
+        pp.product_id === product_id &&
+        pp.unit_id != null &&
+        pp.unit_id !== baseUnitId,
+    )
+    .sort((a, b) => b.effective_date.localeCompare(a.effective_date))
+    .forEach((pp) => {
+      if (!unitMap[pp.unit_id]) unitMap[pp.unit_id] = pp;
+    });
+  return Object.values(unitMap);
+}
+
+/** Get a specific pricing row for a product+unit (latest effective row) */
+function getProductUnitPricing(product_id, unit_id) {
+  const rows = db.product_pricing
+    .filter((pp) => pp.product_id === product_id && pp.unit_id === unit_id)
+    .sort((a, b) => b.effective_date.localeCompare(a.effective_date));
+  return rows[0] || null;
 }
 
 /** Get category name for a product */
@@ -41,7 +82,7 @@ function getProductCategory(product) {
   return cat ? cat.name : "Others";
 }
 
-/** Compute outstanding balance for a credit_transaction */
+/** Compute outstanding balance for a credit row */
 function getCreditBalance(ct) {
   const paid = db.credit_payments
     .filter((p) => p.credit_transaction_id === ct.id)
@@ -49,7 +90,7 @@ function getCreditBalance(ct) {
   return Math.max(0, ct.amount_owed - paid);
 }
 
-/** Compute credit status for a credit_transaction */
+/** Compute credit status */
 function getCreditStatus(ct) {
   const paid = db.credit_payments
     .filter((p) => p.credit_transaction_id === ct.id)
@@ -61,7 +102,7 @@ function getCreditStatus(ct) {
 
 /** Total unpaid balance for a customer */
 function getCustomerDebt(customer_id) {
-  return db.credit_transactions
+  return db.credit
     .filter((ct) => ct.customer_id === customer_id)
     .reduce((sum, ct) => sum + getCreditBalance(ct), 0);
 }
@@ -80,44 +121,7 @@ function getBundleRetailTotal(bundle_id) {
   }, 0);
 }
 
-// ============================================================
-// UNIT + PRICING HELPERS
-// ============================================================
-
-/**
- * Returns true for continuous/measurable units (kg, g, L, ml) where
- * fractional quantities are meaningful.  Discrete units (pc, pk) return false.
- */
-function isContinuousUnit(unit_id) {
-  // unit_ids: 1=pc, 2=L, 3=ml, 4=kg, 5=g, 6=pk
-  return [2, 3, 4, 5].includes(unit_id);
-}
-
-/**
- * Natural step size for incrementing a continuous unit in the cart UI.
- *   kg / L  → 0.5
- *   g / ml  → 100
- */
-function unitStep(unit_id) {
-  if (unit_id === 4 || unit_id === 2) return 0.5; // kg, L
-  if (unit_id === 5 || unit_id === 3) return 100; // g, ml
-  return 1;
-}
-
-/**
- * Format a quantity with its unit abbreviation, trimming unnecessary decimals.
- *   fmtQty(1.5, 4)  → "1.5 kg"
- *   fmtQty(3,   1)  → "3"          (no label for piece)
- *   fmtQty(0.5, 2)  → "0.5 L"
- */
-function fmtQty(qty, unit_id) {
-  const u = db.units.find((x) => x.id === unit_id);
-  const num = parseFloat(qty.toFixed(3)); // trim floating-point noise
-  const numStr = Number.isInteger(num) ? String(num) : String(num);
-  return u && u.id !== 1 && u.id !== 6 ? `${numStr} ${u.abbreviation}` : numStr;
-}
-
-/** Get the product-specific package conversion for a product, if it exists. */
+/** Get product-specific package conversion */
 function getProductPackageConversion(product_id) {
   if (!db.product_package_conversions) return null;
   return (
@@ -126,30 +130,75 @@ function getProductPackageConversion(product_id) {
   );
 }
 
+/** Get stock_log_reason_id by name */
+function getStockLogReasonId(name) {
+  const r = db.stock_log_reasons.find((x) => x.name === name);
+  return r ? r.id : 5; // default: adjustment
+}
+
+/** Get stock_log_reason name by id */
+function getStockLogReasonName(id) {
+  const r = db.stock_log_reasons.find((x) => x.id === id);
+  return r ? r.name : "adjustment";
+}
+
+/** Get sale_type name by id */
+function getSaleTypeName(id) {
+  const st = db.sale_types ? db.sale_types.find((x) => x.id === id) : null;
+  return st ? st.name : id === 2 ? "wholesale" : "retail";
+}
+
+/** Get sale_type_id by name */
+function getSaleTypeId(name) {
+  if (!db.sale_types) return name === "wholesale" ? 2 : 1;
+  const st = db.sale_types.find((x) => x.name === name);
+  return st ? st.id : 1;
+}
+
+// ============================================================
+// UNIT HELPERS
+// ============================================================
+
+function isContinuousUnit(unit_id) {
+  return [2, 3, 4, 5].includes(unit_id);
+}
+
+function unitStep(unit_id) {
+  if (unit_id === 4 || unit_id === 2) return 0.5;
+  if (unit_id === 5 || unit_id === 3) return 100;
+  return 1;
+}
+
+function fmtQty(qty, unit_id) {
+  const u = db.units.find((x) => x.id === unit_id);
+  const num = parseFloat(qty.toFixed(3));
+  return u && u.id !== 1 && u.id !== 6
+    ? `${num} ${u.abbreviation}`
+    : String(num);
+}
+
 /**
  * Resolve the correct unit price for a cart item.
- * Resolution order:
- *   1. product_units row for this product+unit  (explicit per-unit pricing)
- *   2. product_package_conversions              (pack sold at pieces_per_pack × base price)
- *   3. product_pricing                          (base/piece price — fallback)
- *
- * @returns {{ unitPrice: number, saleType: 'retail'|'wholesale' }}
+ * Checks product_pricing for the specific unit_id first, then falls back to base pricing.
  */
 function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
-  // 1. Explicit product_units pricing
+  // 1. Explicit per-unit pricing row in product_pricing
   const puPricing = getProductUnitPricing(product_id, unit_id);
-  if (puPricing) {
-    const wsEnabled =
-      puPricing.wholesale_price > 0 && puPricing.wholesale_min_qty > 0;
-    const isWS = wsEnabled && quantity >= puPricing.wholesale_min_qty;
-    return {
-      unitPrice: isWS ? puPricing.wholesale_price : puPricing.retail_price,
-      saleType: isWS ? "wholesale" : "retail",
-    };
+  if (puPricing && unit_id !== null) {
+    const p = db.products.find((x) => x.id === product_id);
+    // Only use if this is NOT the base unit row (which has its own wholesale logic below)
+    if (p && unit_id !== p.unit_id) {
+      const wsEnabled =
+        puPricing.wholesale_price > 0 && puPricing.wholesale_min_qty > 0;
+      const isWS = wsEnabled && quantity >= puPricing.wholesale_min_qty;
+      return {
+        unitPrice: isWS ? puPricing.wholesale_price : puPricing.retail_price,
+        saleType: isWS ? "wholesale" : "retail",
+      };
+    }
   }
 
   // 2. Pack pricing via product_package_conversions
-  //    e.g. 1 pack = 30 pieces @ ₱1.5/pc → pack price = ₱45
   const pkgConv = getProductPackageConversion(product_id);
   if (pkgConv && unit_id === pkgConv.pack_unit_id) {
     const basePricing = dateStr
@@ -163,7 +212,6 @@ function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
           : 0;
       const wsEnabled =
         basePricing.wholesale_price > 0 && basePricing.wholesale_min_qty > 0;
-      // Wholesale threshold for packs: convert min_qty (pieces) → packs
       const wsMinPacks = wsEnabled
         ? Math.ceil(basePricing.wholesale_min_qty / pkgConv.pieces_per_pack)
         : 0;
@@ -175,7 +223,7 @@ function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
     }
   }
 
-  // 3. Base / piece price fallback
+  // 3. Base price fallback
   const pricing = dateStr
     ? getProductPricingAt(product_id, dateStr)
     : getProductPricing(product_id);
@@ -192,16 +240,11 @@ function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
 
 /**
  * Convert a quantity from sold_unit_id into the product's base unit_id.
- * Resolution order:
- *   1. Same unit → no-op
- *   2. product_package_conversions (product-specific pack↔piece)
- *   3. Global unit_conversions (L↔ml, kg↔g)
- *   4. No path found → 1:1 with warning
  */
 function convertToBaseUnits(quantity, sold_unit_id, base_unit_id, product_id) {
   if (sold_unit_id === base_unit_id) return quantity;
 
-  // 1. Product-specific pack conversion (e.g. 1 pack of Snow Bear = 30 pieces)
+  // 1. Product-specific pack conversion
   if (product_id != null) {
     const pkgConv = getProductPackageConversion(product_id);
     if (pkgConv) {
@@ -209,25 +252,49 @@ function convertToBaseUnits(quantity, sold_unit_id, base_unit_id, product_id) {
         sold_unit_id === pkgConv.pack_unit_id &&
         base_unit_id === pkgConv.base_unit_id
       ) {
-        return quantity * pkgConv.pieces_per_pack; // pack → pieces
+        return quantity * pkgConv.pieces_per_pack;
       }
       if (
         sold_unit_id === pkgConv.base_unit_id &&
         base_unit_id === pkgConv.pack_unit_id
       ) {
-        return quantity / pkgConv.pieces_per_pack; // pieces → pack
+        return quantity / pkgConv.pieces_per_pack;
       }
     }
   }
 
-  // 2. Global physical conversions (L↔ml, kg↔g)
+  // 2. Product-specific unit_conversions
+  if (product_id != null) {
+    const direct = db.unit_conversions.find(
+      (uc) =>
+        uc.product_id === product_id &&
+        uc.from_unit_id === sold_unit_id &&
+        uc.to_unit_id === base_unit_id,
+    );
+    if (direct) return quantity * direct.factor;
+    const inverse = db.unit_conversions.find(
+      (uc) =>
+        uc.product_id === product_id &&
+        uc.from_unit_id === base_unit_id &&
+        uc.to_unit_id === sold_unit_id,
+    );
+    if (inverse) return quantity / inverse.factor;
+  }
+
+  // 3. Global physical conversions
   const direct = db.unit_conversions.find(
-    (uc) => uc.from_unit_id === sold_unit_id && uc.to_unit_id === base_unit_id,
+    (uc) =>
+      uc.product_id == null &&
+      uc.from_unit_id === sold_unit_id &&
+      uc.to_unit_id === base_unit_id,
   );
   if (direct) return quantity * direct.factor;
 
   const inverse = db.unit_conversions.find(
-    (uc) => uc.from_unit_id === base_unit_id && uc.to_unit_id === sold_unit_id,
+    (uc) =>
+      uc.product_id == null &&
+      uc.from_unit_id === base_unit_id &&
+      uc.to_unit_id === sold_unit_id,
   );
   if (inverse) return quantity / inverse.factor;
 

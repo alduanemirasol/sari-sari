@@ -1,24 +1,23 @@
 // ============================================================
-// CREDITS — append-only credit_payments
+// CREDITS — append-only credit_payments (new schema: credit table)
 // ============================================================
 function renderCredits() {
   const list = document.getElementById("credits-list");
 
-  // Compute total from credit_transactions minus credit_payments
-  const totalUtang = db.credit_transactions.reduce(
+  const totalUtang = db.credit.reduce(
     (sum, ct) => sum + getCreditBalance(ct),
     0,
   );
   document.getElementById("total-utang-display").textContent =
     `Total: ${fmt(totalUtang)}`;
 
-  if (db.credit_transactions.length === 0) {
+  if (db.credit.length === 0) {
     list.innerHTML =
       '<div class="empty-state"><div class="icon">📒</div><p>Walang utang records</p></div>';
     return;
   }
 
-  list.innerHTML = db.credit_transactions
+  list.innerHTML = db.credit
     .map((ct) => {
       const customer = db.customers.find((c) => c.id === ct.customer_id);
       if (!customer) return "";
@@ -35,7 +34,6 @@ function renderCredits() {
         unpaid: '<span class="badge badge-red">Hindi pa bayad</span>',
       }[status];
 
-      // Payment history entries for this transaction
       const payments = db.credit_payments.filter(
         (p) => p.credit_transaction_id === ct.id,
       );
@@ -46,11 +44,15 @@ function renderCredits() {
          </div>`
           : "";
 
+      const dueDateHtml = ct.due_date
+        ? `<span style="font-size:11px;color:var(--muted)"> · Due: ${ct.due_date}</span>`
+        : "";
+
       return `<div class="credit-card">
     <div class="credit-avatar">${initials}</div>
     <div class="credit-info">
       <div class="credit-name">${name} ${statusBadge}</div>
-      <div class="credit-detail">Bayad: ${fmt(totalPaid)} / ${fmt(ct.amount_owed)} · ${ct.created_at}</div>
+      <div class="credit-detail">Bayad: ${fmt(totalPaid)} / ${fmt(ct.amount_owed)} · ${ct.created_at}${dueDateHtml}</div>
       ${payHistoryHtml}
       <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${pct === 100 ? "var(--green)" : "var(--warning)"}"></div></div>
     </div>
@@ -63,9 +65,9 @@ function renderCredits() {
     .join("");
 }
 
-function openPayUtang(creditTransactionId) {
-  payingCreditTransactionId = creditTransactionId;
-  const ct = db.credit_transactions.find((c) => c.id === creditTransactionId);
+function openPayUtang(creditId) {
+  payingCreditTransactionId = creditId;
+  const ct = db.credit.find((c) => c.id === creditId);
   const customer = db.customers.find((c) => c.id === ct.customer_id);
   const remaining = getCreditBalance(ct);
   document.getElementById("pay-utang-info").innerHTML = `
@@ -86,13 +88,10 @@ function processUtangPayment() {
     return;
   }
 
-  const ct = db.credit_transactions.find(
-    (c) => c.id === payingCreditTransactionId,
-  );
+  const ct = db.credit.find((c) => c.id === payingCreditTransactionId);
   const remaining = getCreditBalance(ct);
   const actualPaid = Math.min(amount, remaining);
 
-  // Append-only: create a new credit_payment row
   db.credit_payments.push({
     id: genId("credit_payments"),
     credit_transaction_id: ct.id,
@@ -109,9 +108,7 @@ function processUtangPayment() {
 }
 
 function updateUtangBadge() {
-  const unpaid = db.credit_transactions.filter(
-    (ct) => getCreditBalance(ct) > 0,
-  ).length;
+  const unpaid = db.credit.filter((ct) => getCreditBalance(ct) > 0).length;
   const badge = document.getElementById("utang-badge");
   if (unpaid > 0) {
     badge.style.display = "inline";

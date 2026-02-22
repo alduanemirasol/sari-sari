@@ -1,8 +1,5 @@
 // ============================================================
-// POS — Point of Sale
-// ============================================================
-// ============================================================
-// POS
+// POS — Point of Sale (new schema: sale_bundles, sale_types, credit)
 // ============================================================
 function setPosMode(mode) {
   posMode = mode;
@@ -35,7 +32,6 @@ function renderPos() {
 
   renderPosGrid();
 
-  // Populate credit customer select
   const sel = document.getElementById("credit-customer-id");
   sel.innerHTML =
     '<option value="">-- Piliin ang customer --</option>' +
@@ -77,8 +73,6 @@ function renderPosGrid() {
       const pricing = getProductPricing(p.id);
       const unitOptions = getProductUnitOptions(p.id);
       const hasMultiUnits = unitOptions.length > 0;
-
-      // Total qty across all units in cart for this product
       const qty = cart
         .filter((c) => c.product_id === p.id)
         .reduce((sum, c) => sum + c.quantity, 0);
@@ -90,13 +84,17 @@ function renderPosGrid() {
       const retailPrice = pricing ? pricing.retail_price : 0;
       const baseUnit = db.units.find((u) => u.id === p.unit_id);
       const stockLabel = baseUnit ? baseUnit.abbreviation : "pc";
+      const pkgConvCard = getProductPackageConversion(p.id);
       const multiUnitBadge = hasMultiUnits
         ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 Multi-unit</div>`
         : "";
-      // For continuous-unit products with no multi-unit options, show a scale badge
       const scaleBadge =
         !hasMultiUnits && isContinuousUnit(p.unit_id)
           ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">⚖️ By weight/vol</div>`
+          : "";
+      const packBadge =
+        pkgConvCard && !hasMultiUnits && !isContinuousUnit(p.unit_id)
+          ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 Pwede per pack</div>`
           : "";
       return `
     <div class="product-card ${selected}" onclick="addToCart(${p.id})">
@@ -105,8 +103,7 @@ function renderPosGrid() {
       <div class="product-name">${p.name}</div>
       <div class="product-price">${fmt(retailPrice)}${isContinuousUnit(p.unit_id) ? `<span style="font-size:10px;color:var(--muted)">/${stockLabel}</span>` : ""}</div>
       <div class="product-stock">${p.stock_quantity} ${stockLabel}</div>
-      ${multiUnitBadge}${scaleBadge}
-      ${stockBadge}
+      ${multiUnitBadge}${scaleBadge}${packBadge}${stockBadge}
     </div>`;
     })
     .join("");
@@ -140,12 +137,10 @@ function renderPosBundles() {
         })
         .filter(Boolean)
         .join(", ");
-
       const hasStock = bItems.every((bi) => {
         const p = db.products.find((x) => x.id === bi.product_id);
         return p && p.stock_quantity >= bi.quantity;
       });
-
       const firstProduct =
         bItems.length === 1
           ? db.products.find((p) => p.id === bItems[0].product_id)
@@ -176,24 +171,19 @@ function addToCart(product_id) {
     return;
   }
 
-  // Always open the unit picker for:
-  //   (a) products with multiple selling units, OR
-  //   (b) products whose base unit is continuous (kg, g, L, ml)
   const unitOptions = getProductUnitOptions(product_id);
-  if (unitOptions.length > 0 || isContinuousUnit(product.unit_id)) {
+  const pkgConv = getProductPackageConversion(product_id);
+  // Open picker if: multiple units, continuous base unit, OR has a pack conversion
+  if (unitOptions.length > 0 || isContinuousUnit(product.unit_id) || pkgConv) {
     openUnitPickerModal(product_id);
     return;
   }
-
-  // Discrete default unit — add 1 directly
   addToCartWithUnit(product_id, product.unit_id, 1);
 }
 
 function addToCartWithUnit(product_id, unit_id, quantity) {
   const product = db.products.find((p) => p.id === product_id);
   if (!product) return;
-
-  // quantity defaults to 1 for discrete units
   if (quantity === undefined || quantity === null) quantity = 1;
   quantity = parseFloat(quantity);
   if (isNaN(quantity) || quantity <= 0) {
@@ -201,7 +191,6 @@ function addToCartWithUnit(product_id, unit_id, quantity) {
     return;
   }
 
-  // Stock check: convert sold unit → base unit before comparing
   const baseQty = convertToBaseUnits(
     quantity,
     unit_id,
@@ -213,7 +202,6 @@ function addToCartWithUnit(product_id, unit_id, quantity) {
     return;
   }
 
-  // How much base-unit stock is already in the cart for this product (all units)?
   const baseAlreadyInCart = cart
     .filter((c) => c.product_id === product_id)
     .reduce(
@@ -258,12 +246,8 @@ function openUnitPickerModal(product_id) {
       <div style="font-size:12px;color:var(--muted)">Stock: ${product.stock_quantity} ${defaultUnit ? defaultUnit.abbreviation : "pc"}</div>
     </div>`;
 
-  // Build option buttons/inputs: default unit (from product_pricing) + additional units (from product_units)
   let optionsHtml = "";
 
-  // Helper: build a single unit option block
-  // For continuous units → quantity input field + Add button
-  // For discrete units   → single tap button (existing behaviour)
   function buildUnitOption(
     unit_id,
     label,
@@ -298,20 +282,12 @@ function openUnitPickerModal(product_id) {
           <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(pricing)}<span style="font-size:11px;color:var(--muted)">/${abbrv}</span></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <button type="button" class="qty-btn" onclick="
-            var el=document.getElementById('${inputId}');
-            var v=parseFloat(el.value)||0;
-            el.value=Math.max(${step}, parseFloat((v-${step}).toFixed(4)));
-          ">−</button>
+          <button type="button" class="qty-btn" onclick="var el=document.getElementById('${inputId}');var v=parseFloat(el.value)||0;el.value=Math.max(${step},parseFloat((v-${step}).toFixed(4)));">−</button>
           <input type="number" id="${inputId}" min="${step}" step="${step}" value="${step}"
             style="width:80px;text-align:center;font-size:16px;font-weight:700;border:2px solid var(--border);border-radius:8px;padding:6px 4px;outline:none;"
             onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
           <span style="font-size:13px;color:var(--muted);font-weight:600;">${abbrv}</span>
-          <button type="button" class="qty-btn" onclick="
-            var el=document.getElementById('${inputId}');
-            var v=parseFloat(el.value)||0;
-            el.value=parseFloat((v+${step}).toFixed(4));
-          ">+</button>
+          <button type="button" class="qty-btn" onclick="var el=document.getElementById('${inputId}');var v=parseFloat(el.value)||0;el.value=parseFloat((v+${step}).toFixed(4));">+</button>
           <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto;white-space:nowrap;"
             onclick="addToCartWithUnit(${product_id}, ${unit_id}, parseFloat(document.getElementById('${inputId}').value))">
             + I-add
@@ -334,39 +310,115 @@ function openUnitPickerModal(product_id) {
     }
   }
 
-  // Default unit option (from product_pricing)
   if (defaultPricing) {
     const cartItem = cart.find(
       (c) => c.product_id === product_id && c.unit_id === product.unit_id,
     );
-    const inCart = cartItem ? cartItem.quantity : 0;
     optionsHtml += buildUnitOption(
       product.unit_id,
       defaultUnit ? defaultUnit.name : "piece",
       defaultUnit ? defaultUnit.abbreviation : "pc",
       defaultPricing.retail_price,
       defaultPricing,
-      inCart,
+      cartItem ? cartItem.quantity : 0,
     );
   }
 
-  // Additional unit options (from product_units)
   unitOptions.forEach((pu) => {
-    if (pu.unit_id === product.unit_id) return; // already shown as default
+    if (pu.unit_id === product.unit_id) return;
     const unit = db.units.find((u) => u.id === pu.unit_id);
     const cartItem = cart.find(
       (c) => c.product_id === product_id && c.unit_id === pu.unit_id,
     );
-    const inCart = cartItem ? cartItem.quantity : 0;
     optionsHtml += buildUnitOption(
       pu.unit_id,
       pu.label || (unit ? unit.name : "unit"),
       unit ? unit.abbreviation : "?",
       pu.retail_price,
       pu,
-      inCart,
+      cartItem ? cartItem.quantity : 0,
     );
   });
+
+  // Pack option — shown when a product_package_conversions row exists
+  const pkgConv = getProductPackageConversion(product_id);
+  if (pkgConv) {
+    const packUnit = db.units.find((u) => u.id === pkgConv.pack_unit_id); // e.g. "pack"
+    const packAbbrv = packUnit ? packUnit.abbreviation : "pk";
+    const packName = packUnit ? packUnit.name : "Pack";
+    // Compute pack price from base pricing
+    const basePricing = getProductPricing(product_id);
+    const packRetailPrice = basePricing
+      ? basePricing.retail_price * pkgConv.pieces_per_pack
+      : 0;
+    const packWholesalePrice =
+      basePricing && basePricing.wholesale_price > 0
+        ? basePricing.wholesale_price * pkgConv.pieces_per_pack
+        : 0;
+    const wsMinPacks =
+      basePricing && basePricing.wholesale_min_qty > 0
+        ? Math.ceil(basePricing.wholesale_min_qty / pkgConv.pieces_per_pack)
+        : 0;
+    const wsInfo =
+      packWholesalePrice > 0 && wsMinPacks > 0
+        ? ` · Wholesale: ${fmt(packWholesalePrice)} (${wsMinPacks}+ packs)`
+        : "";
+    const cartItem = cart.find(
+      (c) => c.product_id === product_id && c.unit_id === pkgConv.pack_unit_id,
+    );
+    const packInCart = cartItem ? cartItem.quantity : 0;
+    const inCartLine =
+      packInCart > 0
+        ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${packInCart} pk in cart</div>`
+        : "";
+    // Max packs available
+    const maxPacks = Math.floor(
+      product.stock_quantity / pkgConv.pieces_per_pack,
+    );
+    const noStock = maxPacks === 0;
+    const inputId = `upi-qty-${pkgConv.pack_unit_id}`;
+
+    // Build pack card HTML using variables — avoid ternaries inside HTML attributes
+    const packCardStyle = noStock
+      ? "opacity:0.45;background:#f5f5f5;border-color:#ccc;pointer-events:none;cursor:not-allowed;"
+      : "cursor:default;border-color:var(--accent);background:var(--accent-light);";
+    const packBadgeBg = noStock ? "#bbb" : "var(--accent)";
+    const packPriceColor = noStock ? "#bbb" : "var(--accent)";
+    const packStockNote = noStock
+      ? `<div style="font-size:11px;color:#e53e3e;font-weight:600;margin-top:3px;">⚠️ Hindi sapat — kailangan ${pkgConv.pieces_per_pack} pc, ${product.stock_quantity} na lang ang natitira</div>`
+      : `<div style="font-size:11px;color:var(--muted);">Available: ${maxPacks} pack${maxPacks !== 1 ? "s" : ""} (${product.stock_quantity} pc total)</div>`;
+    const packControls = noStock
+      ? `<div style="font-size:12px;color:#aaa;font-style:italic;padding:4px 0;">🚫 Kulang ang stock para sa isang buong pack</div>`
+      : `<div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="qty-btn" onclick="var el=document.getElementById('${inputId}');var v=parseInt(el.value)||1;if(v>1)el.value=v-1;">&#8722;</button>
+          <input type="number" id="${inputId}" min="1" max="${maxPacks}" step="1" value="1"
+            style="width:80px;text-align:center;font-size:16px;font-weight:700;border:2px solid var(--accent);border-radius:8px;padding:6px 4px;outline:none;">
+          <span style="font-size:13px;color:var(--muted);font-weight:600;">${packAbbrv}</span>
+          <button type="button" class="qty-btn" onclick="var el=document.getElementById('${inputId}');var v=parseInt(el.value)||1;if(v<${maxPacks})el.value=v+1;else showToast('Max ${maxPacks} packs available!','warning');">&#43;</button>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto;white-space:nowrap;"
+            onclick="addToCartWithUnit(${product_id}, ${pkgConv.pack_unit_id}, parseInt(document.getElementById('${inputId}').value))">
+            + I-add
+          </button>
+        </div>`;
+
+    optionsHtml += `
+    <div class="unit-picker-opt ${packInCart > 0 ? "selected" : ""}" style="${packCardStyle}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div>
+          <div style="font-weight:700;">
+            &#128230; ${packName}
+            <span style="font-size:11px;color:var(--muted);">(${packAbbrv})</span>
+            <span style="font-size:10px;background:${packBadgeBg};color:white;border-radius:4px;padding:1px 5px;margin-left:4px;">${pkgConv.pieces_per_pack} pc each</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">Retail: ${fmt(packRetailPrice)} / pack${wsInfo}</div>
+          ${packStockNote}
+        </div>
+        <div style="font-size:18px;font-weight:800;color:${packPriceColor};">${fmt(packRetailPrice)}<span style="font-size:11px;color:var(--muted);">/pk</span></div>
+      </div>
+      ${packControls}
+      ${inCartLine}
+    </div>`;
+  }
 
   document.getElementById("unit-picker-options").innerHTML = optionsHtml;
   openModal("modal-unit-picker");
@@ -383,7 +435,6 @@ function addBundleToCart(bundle_id) {
       return;
     }
   }
-
   const existing = cartBundles.find((x) => x.bundle_id === bundle_id);
   if (existing) {
     existing.quantity++;
@@ -408,8 +459,6 @@ function changeCartQty(product_id, unit_id, delta) {
     (c) => c.product_id === product_id && c.unit_id === unit_id,
   );
   if (idx === -1) return;
-
-  // For continuous units use the natural step; discrete units use the passed delta (±1)
   const step = isContinuousUnit(unit_id)
     ? unitStep(unit_id) * Math.sign(delta)
     : delta;
@@ -418,7 +467,6 @@ function changeCartQty(product_id, unit_id, delta) {
   if (newQty <= 0) {
     cart.splice(idx, 1);
   } else {
-    // Stock guard: ensure we don't exceed available stock in base units
     const product = db.products.find((p) => p.id === product_id);
     if (product) {
       const baseAlreadyInCart = cart
@@ -465,15 +513,13 @@ function renderCart() {
     return;
   }
 
-  let subtotal = 0;
-  let totalBundleSavings = 0;
-  let html = "";
+  let subtotal = 0,
+    totalBundleSavings = 0,
+    html = "";
 
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
     if (!p) return;
-
-    // Pricing — respects wholesale-enabled flag via shared helper
     const { unitPrice, saleType } = resolveUnitPrice(
       p.id,
       item.unit_id,
@@ -483,11 +529,8 @@ function renderCart() {
     const unitLabel = unit ? `(${unit.abbreviation})` : "";
     const saleTypeLabel =
       saleType === "wholesale" ? ' <span class="tag">Wholesale</span>' : "";
-
     const lineTotal = unitPrice * item.quantity;
     subtotal += lineTotal;
-
-    // Format quantity display: "1.5 kg" for continuous, plain "3" for discrete
     const qtyDisplay = fmtQty(item.quantity, item.unit_id);
     const priceLabel = isContinuousUnit(item.unit_id)
       ? `${fmt(unitPrice)}/${unit ? unit.abbreviation : ""} × ${qtyDisplay} = ${fmt(lineTotal)}`
@@ -517,7 +560,6 @@ function renderCart() {
     const savings = retailTotal - lineTotal;
     subtotal += lineTotal;
     totalBundleSavings += savings;
-
     const itemsText = bItems
       .map((bi) => {
         const p = db.products.find((x) => x.id === bi.product_id);
@@ -596,10 +638,8 @@ function checkout() {
       return;
     }
 
-    // Check credit limit using helper
     const customer = db.customers.find((c) => c.id === customerId);
     const existingDebt = getCustomerDebt(customerId);
-
     let orderTotal = cart.reduce((sum, item) => {
       const p = db.products.find((x) => x.id === item.product_id);
       if (!p) return sum;
@@ -620,26 +660,47 @@ function checkout() {
     }
   }
 
-  // Create sale — payment_type_id from payment_types table
+  // Create sale
   const paymentTypeObj = db.payment_types.find((pt) => pt.name === payType);
   const saleId = genId("sales");
   const saleDate = now();
+  const dateStr = todayISO();
+  let subtotal = 0;
+
+  // Compute subtotal for sales.subtotal field
+  cart.forEach((item) => {
+    const p = db.products.find((x) => x.id === item.product_id);
+    if (!p) return;
+    const { unitPrice } = resolveUnitPrice(
+      p.id,
+      item.unit_id,
+      item.quantity,
+      dateStr,
+    );
+    subtotal += unitPrice * item.quantity;
+  });
+  cartBundles.forEach((cb) => {
+    const b = db.bundles.find((x) => x.id === cb.bundle_id);
+    if (b) subtotal += b.bundle_price * cb.quantity;
+  });
+
   db.sales.push({
     id: saleId,
     customer_id: customerId,
     payment_type_id: paymentTypeObj.id,
     sale_date: saleDate,
+    subtotal: subtotal,
+    discount: 0,
+    total_amount: subtotal,
+    created_at: dateStr,
   });
 
   let total = 0;
   let receiptItems = [];
-  const dateStr = todayISO();
 
-  // Regular product items
+  // Regular product items → sale_items
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
-
-    // Resolve pricing — respects wholesale-enabled flag, uses price snapshot at sale date
     const { unitPrice, saleType } = resolveUnitPrice(
       p.id,
       item.unit_id,
@@ -653,17 +714,13 @@ function checkout() {
       id: genId("sale_items"),
       sale_id: saleId,
       product_id: item.product_id,
-      bundle_id: null,
       unit_id: item.unit_id,
       quantity_sold: item.quantity,
       unit_price: unitPrice,
       total_price: lineTotal,
-      sale_type: saleType,
+      sale_type: saleType, // string: "retail" or "wholesale"
     });
 
-    // Convert sold qty → product's base unit before deducting stock
-    // e.g. selling 1.5 kg of rice deducts 1.5 from stock_quantity (tracked in kg)
-    // e.g. selling 1 L of Toyo deducts 1000 from stock if stock is tracked in ml
     const baseQty = convertToBaseUnits(
       item.quantity,
       item.unit_id,
@@ -676,8 +733,8 @@ function checkout() {
       product_id: p.id,
       unit_id: item.unit_id,
       stock_batch_id: null,
-      change_qty: -item.quantity, // log in sold unit for readability
-      reason: "sold",
+      stock_log_reason_id: getStockLogReasonId("sold"),
+      change_qty: -item.quantity,
       notes: `Sale #${saleId}`,
       created_at: dateStr,
     });
@@ -693,7 +750,7 @@ function checkout() {
     });
   });
 
-  // Bundle items
+  // Bundle items → sale_bundles + sale_bundle_items
   cartBundles.forEach((cb) => {
     const bundle = db.bundles.find((x) => x.id === cb.bundle_id);
     if (!bundle) return;
@@ -701,21 +758,17 @@ function checkout() {
     const lineTotal = bundle.bundle_price * cb.quantity;
     total += lineTotal;
 
-    // One sale_item row represents the bundle sale
-    const saleItemId = genId("sale_items");
-    db.sale_items.push({
-      id: saleItemId,
+    // Create sale_bundles row
+    const saleBundleId = genId("sale_bundles");
+    db.sale_bundles.push({
+      id: saleBundleId,
       sale_id: saleId,
-      product_id: null,
       bundle_id: bundle.id,
-      unit_id: null,
       quantity_sold: cb.quantity,
-      unit_price: bundle.bundle_price, // snapshotted bundle price
-      total_price: lineTotal,
-      sale_type: "bundle",
+      unit_price: bundle.bundle_price,
     });
 
-    // sale_bundle_items: individual product deductions for this bundle line
+    // sale_bundle_items: per-product deductions
     bItems.forEach((bi) => {
       const p = db.products.find((x) => x.id === bi.product_id);
       if (!p) return;
@@ -723,22 +776,21 @@ function checkout() {
 
       db.sale_bundle_items.push({
         id: genId("sale_bundle_items"),
-        sale_item_id: saleItemId,
+        sale_bundle_id: saleBundleId,
         bundle_item_id: bi.id,
         product_id: bi.product_id,
-        unit_id: bi.unit_id,
+        unit_id: bi.unit_id || p.unit_id,
         quantity_deducted: totalQty,
       });
 
-      // Deduct stock + log
       p.stock_quantity -= totalQty;
       db.stock_logs.push({
         id: genId("stock_logs"),
         product_id: p.id,
         unit_id: p.unit_id,
         stock_batch_id: null,
+        stock_log_reason_id: getStockLogReasonId("sold"),
         change_qty: -totalQty,
-        reason: "sold",
         notes: `Bundle sale #${saleId} — ${bundle.bundle_name}`,
         created_at: dateStr,
       });
@@ -759,10 +811,10 @@ function checkout() {
     });
   });
 
-  // Create credit_transaction if credit sale
+  // Create credit row if credit sale
   if (payType === "credit") {
-    db.credit_transactions.push({
-      id: genId("credit_transactions"),
+    db.credit.push({
+      id: genId("credit"),
       customer_id: customerId,
       sale_id: saleId,
       amount_owed: total,
@@ -829,25 +881,19 @@ function toggleMobileCart() {
   cart.classList.toggle("cart-expanded");
 }
 
-// Wire the cart header click for mobile
 document.addEventListener("DOMContentLoaded", function () {
   const cartHeader = document.querySelector(".cart-header");
   if (cartHeader) {
-    cartHeader.addEventListener("click", function (e) {
-      // Only toggle on tablet/mobile (when pos-right is fixed)
-      if (window.innerWidth <= 1024) {
-        toggleMobileCart();
-      }
+    cartHeader.addEventListener("click", function () {
+      if (window.innerWidth <= 1024) toggleMobileCart();
     });
   }
 });
 
-// When cart contents change, auto-expand if items added on mobile
 function maybeExpandMobileCart() {
   if (window.innerWidth <= 1024) {
     const cartEl = document.querySelector(".pos-right");
-    if (cartEl && (cart.length > 0 || cartBundles.length > 0)) {
+    if (cartEl && (cart.length > 0 || cartBundles.length > 0))
       cartEl.classList.add("cart-expanded");
-    }
   }
 }

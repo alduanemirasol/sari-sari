@@ -1,5 +1,5 @@
 // ============================================================
-// PRODUCTS
+// PRODUCTS (new schema: product_units merged into product_pricing)
 // ============================================================
 function renderProducts() {
   const search = (
@@ -92,16 +92,14 @@ function editProduct(id) {
     ? pricing.wholesale_min_qty
     : "";
 
-  // Check wholesale enabled if product has a non-zero wholesale price
   const hasWholesale = pricing && pricing.wholesale_price > 0;
   document.getElementById("p-wholesale-enabled").checked = hasWholesale;
   toggleWholesaleSection();
 
-  // Load package conversion if any
   const existingPkgConv = getProductPackageConversion(id);
   loadPackageSection(existingPkgConv);
 
-  // Load existing unit rows
+  // Load additional unit pricing rows (non-base units from product_pricing)
   const existingUnits = getProductUnitOptions(id);
   renderProductUnitRows(existingUnits);
   openModal("modal-product");
@@ -125,6 +123,7 @@ function saveProduct() {
   const wholesaleMinQty = wholesaleEnabled
     ? parseInt(document.getElementById("p-minqty").value) || 0
     : 0;
+  const today = todayISO();
 
   if (editingProductId) {
     const p = db.products.find((x) => x.id === editingProductId);
@@ -132,8 +131,8 @@ function saveProduct() {
     p.product_category_id = catId;
     p.stock_quantity = parseInt(document.getElementById("p-stock").value);
     p.image_url = getCategoryEmoji(catId);
+    p.updated_at = today;
 
-    // Add new pricing row with today's date (price history preserved)
     const existingPricing = getProductPricing(editingProductId);
     const priceChanged =
       !existingPricing ||
@@ -145,30 +144,51 @@ function saveProduct() {
       db.product_pricing.push({
         id: genId("product_pricing"),
         product_id: editingProductId,
+        unit_id: null, // null = base unit pricing row
+        label: null,
         retail_price: retailPrice,
         wholesale_price: wholesalePrice,
         wholesale_min_qty: wholesaleMinQty,
-        effective_date: todayISO(),
+        effective_date: today,
       });
     }
 
-    // Save / update package conversion
     savePackageConversion(editingProductId);
 
-    // Replace product_units for this product with pendingProductUnits
-    db.product_units = db.product_units.filter(
-      (pu) => pu.product_id !== editingProductId,
+    // Remove ALL pricing rows for this product (base + additional units)
+    // then cleanly re-add: base row (new if price changed, else copy of latest) + additional unit rows
+    db.product_pricing = db.product_pricing.filter(
+      (pp) => pp.product_id !== editingProductId,
     );
+
+    // Re-add base pricing row
+    if (priceChanged) {
+      db.product_pricing.push({
+        id: genId("product_pricing"),
+        product_id: editingProductId,
+        unit_id: null,
+        label: null,
+        retail_price: retailPrice,
+        wholesale_price: wholesalePrice,
+        wholesale_min_qty: wholesaleMinQty,
+        effective_date: today,
+      });
+    } else if (existingPricing) {
+      db.product_pricing.push({ ...existingPricing });
+    }
+
+    // Add additional unit rows from pendingProductUnits
     pendingProductUnits.forEach((pu) => {
       if (pu.retail_price > 0) {
-        db.product_units.push({
-          id: genId("product_units"),
+        db.product_pricing.push({
+          id: genId("product_pricing"),
           product_id: editingProductId,
           unit_id: pu.unit_id,
+          label: pu.label || null,
           retail_price: pu.retail_price,
           wholesale_price: pu.wholesale_price || 0,
-          wholesale_min_qty: pu.wholesale_min_qty || 10,
-          label: pu.label || "",
+          wholesale_min_qty: pu.wholesale_min_qty || 0,
+          effective_date: today,
         });
       }
     });
@@ -184,31 +204,33 @@ function saveProduct() {
       stock_quantity: parseInt(document.getElementById("p-stock").value),
       image_url: getCategoryEmoji(catId),
       is_active: true,
+      created_at: today,
+      updated_at: today,
     });
-    // Create initial pricing row
     db.product_pricing.push({
       id: genId("product_pricing"),
       product_id: newId,
+      unit_id: null,
+      label: null,
       retail_price: retailPrice,
       wholesale_price: wholesalePrice,
       wholesale_min_qty: wholesaleMinQty,
-      effective_date: todayISO(),
+      effective_date: today,
     });
 
-    // Save package conversion for new product
     savePackageConversion(newId);
 
-    // Save product_units
     pendingProductUnits.forEach((pu) => {
       if (pu.retail_price > 0) {
-        db.product_units.push({
-          id: genId("product_units"),
+        db.product_pricing.push({
+          id: genId("product_pricing"),
           product_id: newId,
           unit_id: pu.unit_id,
+          label: pu.label || null,
           retail_price: pu.retail_price,
           wholesale_price: pu.wholesale_price || 0,
-          wholesale_min_qty: pu.wholesale_min_qty || 10,
-          label: pu.label || "",
+          wholesale_min_qty: pu.wholesale_min_qty || 0,
+          effective_date: today,
         });
       }
     });
@@ -223,7 +245,6 @@ function saveProduct() {
 
 function deleteProduct(id) {
   if (!confirm("Sigurado ka bang gusto mong i-delete?")) return;
-  // Soft delete — preserve history
   const p = db.products.find((x) => x.id === id);
   if (p) p.is_active = false;
   saveDb();
@@ -232,17 +253,32 @@ function deleteProduct(id) {
 }
 
 function getCategoryEmoji(catId) {
-  const map = { 1: "🍬", 2: "🥤", 3: "🍟", 4: "🍶", 5: "🧴", 6: "🚬", 7: "📦" };
+  const map = {
+    1: "🍬",
+    2: "🥤",
+    3: "🍟",
+    4: "🍶",
+    5: "🧴",
+    6: "🚬",
+    7: "📦",
+    8: "🫙",
+    9: "🥫",
+    10: "🍜",
+    11: "☕",
+    12: "🧊",
+    13: "🧹",
+    14: "🏠",
+    15: "📦",
+  };
   return map[catId] || "📦";
 }
 
 // ============================================================
-// PRODUCT UNIT MANAGEMENT (for product modal)
+// PRODUCT UNIT MANAGEMENT (additional unit pricing rows)
 // ============================================================
-let pendingProductUnits = []; // temp state while modal is open
+let pendingProductUnits = [];
 
 function renderProductUnitRows(existingUnits) {
-  // Clone existing units into pendingProductUnits
   pendingProductUnits = existingUnits.map((pu) => ({ ...pu }));
   redrawProductUnitRows();
 }
@@ -253,11 +289,6 @@ function redrawProductUnitRows() {
     container.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:8px 0;font-style:italic;">No additional units. Click "+ Add Unit" to add one.</div>`;
     return;
   }
-  const unitOptions = db.units
-    .map(
-      (u) => `<option value="${u.id}">${u.name} (${u.abbreviation})</option>`,
-    )
-    .join("");
   container.innerHTML = pendingProductUnits
     .map(
       (pu, i) => `
@@ -314,29 +345,18 @@ function removeProductUnitRow(index) {
 }
 
 function updatePendingUnit(index, field, value) {
-  if (pendingProductUnits[index]) {
-    pendingProductUnits[index][field] = value;
-  }
+  if (pendingProductUnits[index]) pendingProductUnits[index][field] = value;
 }
 
 // ============================================================
-// PACKAGE CONVERSION SECTION (product modal)
+// PACKAGE CONVERSION SECTION
 // ============================================================
-
-/**
- * Reset the package conversion form to its default empty/hidden state.
- * Called when opening the Add Product modal.
- */
 function resetPackageSection() {
   document.getElementById("p-pkg-enabled").checked = false;
   document.getElementById("p-pkg-pieces").value = "";
   togglePackageSection();
 }
 
-/**
- * Populate the package section fields from an existing conversion row.
- * Called when opening the Edit Product modal.
- */
 function loadPackageSection(pkgConv) {
   if (pkgConv) {
     document.getElementById("p-pkg-enabled").checked = true;
@@ -348,7 +368,6 @@ function loadPackageSection(pkgConv) {
   togglePackageSection();
 }
 
-/** Show/hide the package details sub-section based on the checkbox. */
 function togglePackageSection() {
   const enabled = document.getElementById("p-pkg-enabled").checked;
   document.getElementById("p-pkg-details").style.display = enabled
@@ -356,28 +375,20 @@ function togglePackageSection() {
     : "none";
 }
 
-/**
- * Persist the package conversion for a given product_id.
- * Reads the form state; creates, updates, or removes the row as needed.
- */
 function savePackageConversion(product_id) {
   if (!db.product_package_conversions) db.product_package_conversions = [];
-
   const enabled = document.getElementById("p-pkg-enabled").checked;
   const piecesPerPack =
     parseInt(document.getElementById("p-pkg-pieces").value) || 0;
-
-  // Remove any existing conversion for this product first
   db.product_package_conversions = db.product_package_conversions.filter(
     (c) => c.product_id !== product_id,
   );
-
   if (enabled && piecesPerPack > 0) {
     db.product_package_conversions.push({
       id: genId("product_package_conversions"),
       product_id,
-      pack_unit_id: 6, // unit_id 6 = pack
-      base_unit_id: 1, // unit_id 1 = piece (the base unit the product is tracked in)
+      pack_unit_id: 6,
+      base_unit_id: 1,
       pieces_per_pack: piecesPerPack,
     });
   }
