@@ -1,156 +1,286 @@
+================================================================================
+  IMPROVED POS & MANAGEMENT SYSTEM SCHEMA (Single-User)
+  Changes from original are marked with [NEW] or [CHANGED]
+================================================================================
+
+--------------------------------------------------------------------------------
+LOOKUP / REFERENCE TABLES
+--------------------------------------------------------------------------------
+
 product_categories:
-  id: 1
-  name: Snacks
+  id
+  name                        e.g. Snacks, Beverages, Household
 
 expense_categories:
-  id: 1
-  name: Expenses
+  id
+  name                        e.g. Utilities, Supplies, Salary
 
 payment_types:
-  id: 1
-  name: cash (cash, credit)
+  id
+  name                        e.g. cash, credit, gcash, bank_transfer
 
 sale_types:
-  id: 1
-  name: retail (retail, wholesale)
+  id
+  name                        e.g. retail, wholesale
 
 units:
-  id: 1
-  name: liter
-  abbreviation: L
+  id
+  name                        e.g. liter, piece, kilogram
+  abbreviation                e.g. L, pc, kg
 
 unit_conversions:
-  id: 1
-  product_id: FK to products.id
-  from_unit_id: FK to units.id
-  to_unit_id: FK to units.id
-  factor: Multiply to convert. e.g. 1L → 1000ml, factor = 1000
+  id
+  product_id                  FK to products.id
+  from_unit_id                FK to units.id
+  to_unit_id                  FK to units.id
+  factor                      Multiply to convert. e.g. 1L → 1000ml, factor = 1000
 
 stock_log_reasons:
-  id: 1
-  name: restocked, sold, damaged, expired, adjustment
+  id
+  name                        e.g. restocked, sold, damaged, expired, adjustment, returned
+
+[NEW] sale_statuses:
+  id
+  name                        e.g. completed, voided, held
+  -- Replaces free-text status on sales. Allows held/parked transactions.
+
+[NEW] return_reasons:
+  id
+  name                        e.g. defective, wrong_item, customer_changed_mind, expired
+
+--------------------------------------------------------------------------------
+SESSIONS / SHIFTS
+--------------------------------------------------------------------------------
+
+[NEW] sessions:
+  id
+  opened_at
+  closed_at                   NULL while session is open
+  opening_cash                Float declared at session start
+  closing_cash                Float counted at session close
+  notes
+  -- Tracks each POS shift for daily cash reconciliation.
+
+[NEW] session_cash_movements:
+  id
+  session_id                  FK to sessions.id
+  movement_type               e.g. cash_in, cash_out
+  amount
+  notes                       e.g. "bank deposit", "petty cash refill"
+  created_at
+
+--------------------------------------------------------------------------------
+PRODUCTS
+--------------------------------------------------------------------------------
 
 products:
-  id: 1
-  name: Snow Bear
-  unit_id: FK to units.id
-  product_category_id: FK to product_categories.id
-  stock_quantity: 50
-  image_url:
-  is_active: Soft delete flag. true = active
-  created_at:
-  updated_at:
+  id
+  name                        e.g. Snow Bear
+  unit_id                     FK to units.id (base unit)
+  product_category_id         FK to product_categories.id
+  stock_quantity              Denormalized for fast reads. Keep in sync via app/trigger.
+  image_url
+  is_active                   Soft delete. true = active
+  created_at
+  updated_at
 
 product_pricing:
-  id: 1
-  product_id: FK to products.id
-  unit_id: FK to units.id
-  label: Display label in POS unit picker. e.g. Per Liter (L). Null for base unit
-  retail_price: 1.00
-  wholesale_price: 48.00
-  wholesale_min_qty: 50
-  effective_date: 2025-02-19
+  id
+  product_id                  FK to products.id
+  unit_id                     FK to units.id
+  label                       Display label in POS unit picker. e.g. "Per Liter (L)"
+  retail_price
+  wholesale_price
+  wholesale_min_qty           Minimum qty to qualify for wholesale price
+  effective_date              Price history is preserved by inserting new rows
+
+--------------------------------------------------------------------------------
+BUNDLES
+--------------------------------------------------------------------------------
 
 bundles:
-  id: 1
-  bundle_name: 3 Candies for 5 pesos
-  bundle_price: 5.00
-  is_active: true
-  created_at:
-  updated_at:
+  id
+  bundle_name                 e.g. 3 Candies for 5 pesos
+  bundle_price
+  is_active
+  created_at
+  updated_at
 
 bundle_items:
-  id: 1
-  bundle_id: FK to bundles.id
-  product_id: FK to products.id
-  unit_id: FK to units.id
-  quantity:
+  id
+  bundle_id                   FK to bundles.id
+  product_id                  FK to products.id
+  unit_id                     FK to units.id
+  quantity
+
+--------------------------------------------------------------------------------
+STOCK
+--------------------------------------------------------------------------------
 
 stock_batches:
-  id:
-  product_id: FK to products.id
-  unit_id: FK to units.id
-  quantity_received:
-  expiration_date:
-  created_at:
-  notes:
-  updated_at:
+  id
+  product_id                  FK to products.id
+  unit_id                     FK to units.id
+  quantity_received
+  expiration_date
+  notes
+  created_at
+  updated_at
 
 stock_logs:
-  id:
-  product_id: FK to products.id
-  unit_id: FK to units.id
-  stock_batch_id: FK to stock_batches.id
-  stock_log_reason_id: FK to stock_log_reasons.id
-  change_qty:
-  notes:
-  created_at:
+  id
+  product_id                  FK to products.id
+  unit_id                     FK to units.id
+  stock_batch_id              FK to stock_batches.id (nullable — not all logs tie to a batch)
+  stock_log_reason_id         FK to stock_log_reasons.id
+  change_qty                  Positive = stock in, Negative = stock out
+  notes
+  created_at
+
+--------------------------------------------------------------------------------
+CUSTOMERS
+--------------------------------------------------------------------------------
 
 customers:
-  id:
-  first_name:
-  middle_name:
-  last_name:
-  contact_number:
-  municipality:
-  barangay:
-  street:
-  credit_limit:
-  created_at:
-  updated_at:
+  id
+  first_name
+  middle_name
+  last_name
+  contact_number
+  municipality
+  barangay
+  street
+  credit_limit
+  is_active                   [NEW] Soft delete for consistency with products
+  created_at
+  updated_at
+
+--------------------------------------------------------------------------------
+SALES
+--------------------------------------------------------------------------------
 
 sales:
-  id:
-  customer_id: FK to customers.id
-  payment_type_id: FK to payment_types.id
-  sale_date:
-  subtotal:
-  discount:
-  total_amount:
-  created_at:
+  id
+  session_id                  [NEW] FK to sessions.id — ties each sale to a shift
+  customer_id                 FK to customers.id (nullable for walk-in/anonymous)
+  payment_type_id             FK to payment_types.id
+  sale_status_id              [NEW] FK to sale_statuses.id — replaces no-status gap
+  sale_date
+  subtotal
+  discount
+  total_amount
+  notes                       [NEW] e.g. "market day discount", "bulk order"
+  created_at
 
 sale_items:
-  id:
-  sale_id: FK to sales.id
-  product_id: FK to products.id
-  unit_id: FK to units.id
-  quantity_sold:
-  unit_price:
-  sale_type: retail or wholesale
+  id
+  sale_id                     FK to sales.id
+  product_id                  FK to products.id
+  unit_id                     FK to units.id
+  sale_type_id                [CHANGED] FK to sale_types.id — was free-text, now normalized
+  quantity_sold
+  unit_price
 
 sale_bundles:
-  id:
-  sale_id: FK to sales.id
-  bundle_id: FK to bundles.id
-  quantity_sold:
-  unit_price:
+  id
+  sale_id                     FK to sales.id
+  bundle_id                   FK to bundles.id
+  quantity_sold
+  unit_price
 
 sale_bundle_items:
-  id:
-  sale_bundle_id: FK to sale_bundles.id
-  bundle_item_id: FK to bundle_items.id
-  quantity_deducted:
+  id
+  sale_bundle_id              FK to sale_bundles.id
+  bundle_item_id              FK to bundle_items.id
+  quantity_deducted
+
+--------------------------------------------------------------------------------
+RETURNS & REFUNDS  [NEW SECTION]
+--------------------------------------------------------------------------------
+
+[NEW] sale_returns:
+  id
+  original_sale_id            FK to sales.id
+  return_reason_id            FK to return_reasons.id
+  return_date
+  total_refund_amount
+  notes
+  created_at
+
+[NEW] sale_return_items:
+  id
+  sale_return_id              FK to sale_returns.id
+  sale_item_id                FK to sale_items.id (original line being returned)
+  quantity_returned
+  refund_amount               Per-line refund (may differ from original price e.g. partial)
+  restock                     Boolean — whether item goes back to inventory
+
+--------------------------------------------------------------------------------
+CREDIT
+--------------------------------------------------------------------------------
 
 credit_transactions:
-  id:
-  customer_id: FK to customers.id
-  sale_id: FK to sales.id
-  amount_owed:
-  due_date:
-  created_at:
+  id
+  customer_id                 FK to customers.id
+  sale_id                     FK to sales.id
+  amount_owed
+  amount_paid                 [NEW] Running total paid, updated on each payment
+  remaining_balance           [NEW] Computed: amount_owed - amount_paid (or use a view)
+  due_date
+  is_settled                  [NEW] Boolean flag for quick filtering of open vs closed debts
+  created_at
 
 credit_payments:
-  id:
-  credit_transaction_id: FK to credit_transactions.id
-  amount_paid:
-  paid_at:
-  notes:
+  id
+  credit_transaction_id       FK to credit_transactions.id
+  amount_paid
+  paid_at
+  notes
+
+--------------------------------------------------------------------------------
+EXPENSES
+--------------------------------------------------------------------------------
 
 expenses:
-  id:
-  expense_category_id: FK to expense_categories.id
-  amount:
-  notes:
-  image_url:
-  created_at:
-  expense_date:
+  id
+  expense_category_id         FK to expense_categories.id
+  session_id                  [NEW] FK to sessions.id (nullable) — ties expense to a shift
+  amount
+  notes
+  image_url
+  expense_date                Use this for reporting
+  created_at                  Use this for auditing
+
+================================================================================
+NOTES ON KEY DESIGN DECISIONS
+================================================================================
+
+1. STOCK SOURCE OF TRUTH
+   products.stock_quantity is kept as a denormalized fast-read column.
+   It must be updated atomically alongside every stock_logs insert.
+   The true stock can always be recomputed from stock_logs if discrepancy is found.
+
+2. PRICE HISTORY
+   product_pricing uses effective_date rows rather than overwriting prices.
+   The active price for a product is the row with the latest effective_date <= today.
+
+3. VOIDING SALES
+   Set sales.sale_status_id to 'voided'. Do not delete rows.
+   Voiding should trigger compensating stock_logs entries (positive change_qty)
+   to restore inventory.
+
+4. HELD / PARKED TRANSACTIONS
+   Set sales.sale_status_id to 'held'. Items are reserved but stock is not deducted
+   until the sale is completed.
+
+5. CREDIT BALANCE
+   credit_transactions.remaining_balance can be stored as a column updated on
+   each credit_payment, or computed via a database view. For a single-user SQLite
+   setup, a view is recommended to avoid sync bugs.
+
+6. SESSIONS
+   Each day (or shift) should open one session. All sales and cash movements
+   are tied to it. On close, compare sum of completed sales + opening_cash +
+   cash_in movements - cash_out movements against closing_cash to get variance.
+
+================================================================================
