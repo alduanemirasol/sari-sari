@@ -348,6 +348,7 @@
                                     <th>Customer</th>
                                     <th>Total</th>
                                     <th>Date</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="sales-body"></tbody>
@@ -768,6 +769,28 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-ghost" onclick="closeModal('modal-unit-picker')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sale Detail Modal -->
+    <div class="modal-overlay" id="modal-sale-detail">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <span class="modal-title" id="sale-detail-title">🧾 Sale Details</span>
+                <button class="modal-close" onclick="closeModal('modal-sale-detail')">✕</button>
+            </div>
+            <div class="modal-body" style="padding:0;">
+                <div id="sale-detail-meta"
+                    style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-bottom:1px solid var(--border);">
+                </div>
+                <div id="sale-detail-items" style="padding:0;"></div>
+                <div id="sale-detail-footer"
+                    style="padding:14px 20px;border-top:2px solid var(--border);background:var(--bg);">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-sale-detail')">Close</button>
             </div>
         </div>
     </div>
