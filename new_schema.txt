@@ -131,7 +131,7 @@ sale_bundle_items:
   bundle_item_id: FK to bundle_items.id
   quantity_deducted:
 
-credit:
+credit_transactions:
   id:
   customer_id: FK to customers.id
   sale_id: FK to sales.id
@@ -141,7 +141,7 @@ credit:
 
 credit_payments:
   id:
-  credit_transaction_id: FK to credit.id
+  credit_transaction_id: FK to credit_transactions.id
   amount_paid:
   paid_at:
   notes:
