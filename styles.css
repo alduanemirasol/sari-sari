@@ -1459,3 +1459,35 @@ select.form-select {
   font-weight: 700;
   letter-spacing: 0.3px;
 }
+/* ============================================================
+   UNIT PICKER MODAL
+   ============================================================ */
+.unit-picker-opt {
+  width: 100%;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.unit-picker-opt:hover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+.unit-picker-opt.selected {
+  border-color: var(--green);
+  background: #f0fdf4;
+}
+
+/* Multi-unit badge on POS product cards */
+.product-card .multi-unit-badge {
+  font-size: 10px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 2px;
+}

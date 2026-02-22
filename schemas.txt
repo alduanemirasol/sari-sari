@@ -24,9 +24,9 @@ unit_conversions:
 products:
 - id
 - name                  'Snow Bear'
-- unit_id               FK to units.id
+- unit_id               FK to units.id (base/default unit for stock tracking)
 - product_category_id   FK to product_categories.id
-- stock_quantity        '200'
+- stock_quantity        '200' (always tracked in the product's base unit_id)
 - image_url             'local_db/products/snow-bear.jpg'
 - is_active             true (soft delete instead of destroying records)
 
@@ -38,9 +38,24 @@ product_pricing:
 - wholesale_min_qty     '100'
 - effective_date        '02-19-25' (track price changes over time; use latest row as current price)
 
+product_units:
+- id
+- product_id            FK to products.id
+- unit_id               FK to units.id (the alternative selling unit, e.g., liter, pack)
+- retail_price          '45.00' (price per this unit)
+- wholesale_price       '35.00'
+- wholesale_min_qty     '5' (min qty of this unit to qualify for wholesale price)
+- label                 'Per Liter (L)' (optional display label shown in POS unit picker)
+  NOTE: A product can have zero or more product_units rows. When at least one exists,
+  the POS shows a unit picker modal so the cashier selects which unit to sell.
+  Pricing in sale_items is resolved from product_units first; falls back to
+  product_pricing if no matching product_units row exists for that unit.
+  The product's base unit (products.unit_id) is always shown as an option using
+  product_pricing; product_units rows add additional sellable units on top.
+
 bundles:
 - id
-- bundle_name           '3 Candies for 5'
+- bundle_name           '3 Candies for 5 pesos'
 - bundle_price          '5.00'
 - is_active             true (soft delete; old sale_items can still reference retired bundles)
 
@@ -83,7 +98,7 @@ customers:
 
 sales:
 - id
-- customer_id           FK to customers.id (null if walk-in)
+- customer_id           FK to customers.id (null if walk-in/cash)
 - payment_type_id       FK to payment_types.id
 - sale_date             '02-19-25 7:45AM'
 
@@ -92,7 +107,7 @@ sale_items:
 - sale_id               FK to sales.id
 - product_id            FK to products.id (null if bundle sale)
 - bundle_id             FK to bundles.id (null if product sale)
-- unit_id               FK to units.id
+- unit_id               FK to units.id (the unit the customer actually bought in; from product_units or products.unit_id)
 - quantity_sold         '1'
 - unit_price            '1.00' (snapshotted at time of sale; retail or wholesale price, or bundle_price / bundle qty)
 - total_price           '1.00' (quantity_sold × unit_price; stored for query convenience)

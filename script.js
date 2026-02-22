@@ -35,8 +35,12 @@ function closeModal(id) {
 }
 
 function showPage(name, el) {
-  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
-  document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
+  document
+    .querySelectorAll(".page")
+    .forEach((p) => p.classList.remove("active"));
+  document
+    .querySelectorAll(".nav-item")
+    .forEach((n) => n.classList.remove("active"));
   document.getElementById("page-" + name).classList.add("active");
   if (el) el.classList.add("active");
   document.getElementById("page-title").textContent = {
@@ -71,61 +75,88 @@ function refreshPage(name) {
 // ============================================================
 function renderDashboard() {
   const today = new Date().toDateString();
-  const todaySales = db.sales.filter((s) => new Date(s.sale_date).toDateString() === today);
+  const todaySales = db.sales.filter(
+    (s) => new Date(s.sale_date).toDateString() === today,
+  );
   const totalToday = todaySales.reduce((sum, s) => {
-    return sum + db.sale_items.filter((i) => i.sale_id === s.id).reduce((a, b) => a + b.total_price, 0);
+    return (
+      sum +
+      db.sale_items
+        .filter((i) => i.sale_id === s.id)
+        .reduce((a, b) => a + b.total_price, 0)
+    );
   }, 0);
 
   // Use helper functions for credit balance
-  const unpaidCTs = db.credit_transactions.filter(ct => getCreditBalance(ct) > 0);
-  const totalUtang = unpaidCTs.reduce((sum, ct) => sum + getCreditBalance(ct), 0);
-  const uniqueDebtors = [...new Set(unpaidCTs.map((ct) => ct.customer_id))].length;
-  const activeProducts = db.products.filter(p => p.is_active);
+  const unpaidCTs = db.credit_transactions.filter(
+    (ct) => getCreditBalance(ct) > 0,
+  );
+  const totalUtang = unpaidCTs.reduce(
+    (sum, ct) => sum + getCreditBalance(ct),
+    0,
+  );
+  const uniqueDebtors = [...new Set(unpaidCTs.map((ct) => ct.customer_id))]
+    .length;
+  const activeProducts = db.products.filter((p) => p.is_active);
   const lowStock = activeProducts.filter((p) => p.stock_quantity <= 10);
 
   document.getElementById("stat-sales").textContent = fmt(totalToday);
-  document.getElementById("stat-txn").textContent = todaySales.length + " transactions";
+  document.getElementById("stat-txn").textContent =
+    todaySales.length + " transactions";
   document.getElementById("stat-products").textContent = activeProducts.length;
   document.getElementById("stat-utang").textContent = fmt(totalUtang);
-  document.getElementById("stat-debtors").textContent = uniqueDebtors + " customers";
+  document.getElementById("stat-debtors").textContent =
+    uniqueDebtors + " customers";
   document.getElementById("stat-lowstock").textContent = lowStock.length;
 
   // Recent sales
   const tbody = document.getElementById("dashboard-sales-body");
   const recent = [...db.sales].reverse().slice(0, 5);
   if (recent.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>No sales yet today</p></div></td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="4"><div class="empty-state"><p>No sales yet today</p></div></td></tr>';
   } else {
-    tbody.innerHTML = recent.map((s) => {
-      const items = db.sale_items.filter((i) => i.sale_id === s.id);
-      const total = items.reduce((a, b) => a + b.total_price, 0);
-      const names = items.map((i) => {
-        if (i.bundle_id) {
-          const b = db.bundles.find(x => x.id === i.bundle_id);
-          return b ? `🎁 ${b.bundle_name}` : "?";
-        }
-        const p = db.products.find((x) => x.id === i.product_id);
-        return p ? p.name : "?";
-      }).join(", ");
-      const paymentType = db.payment_types.find(pt => pt.id === s.payment_type_id);
-      const pt = paymentType?.name === "credit"
-        ? `<span class="badge badge-red">Utang</span>`
-        : `<span class="badge badge-green">Cash</span>`;
-      return `<tr><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${names}</td><td>${pt}</td><td style="color:var(--accent);font-weight:700">${fmt(total)}</td><td style="color:var(--muted);font-size:12px">${s.sale_date}</td></tr>`;
-    }).join("");
+    tbody.innerHTML = recent
+      .map((s) => {
+        const items = db.sale_items.filter((i) => i.sale_id === s.id);
+        const total = items.reduce((a, b) => a + b.total_price, 0);
+        const names = items
+          .map((i) => {
+            if (i.bundle_id) {
+              const b = db.bundles.find((x) => x.id === i.bundle_id);
+              return b ? `🎁 ${b.bundle_name}` : "?";
+            }
+            const p = db.products.find((x) => x.id === i.product_id);
+            return p ? p.name : "?";
+          })
+          .join(", ");
+        const paymentType = db.payment_types.find(
+          (pt) => pt.id === s.payment_type_id,
+        );
+        const pt =
+          paymentType?.name === "credit"
+            ? `<span class="badge badge-red">Utang</span>`
+            : `<span class="badge badge-green">Cash</span>`;
+        return `<tr><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${names}</td><td>${pt}</td><td style="color:var(--accent);font-weight:700">${fmt(total)}</td><td style="color:var(--muted);font-size:12px">${s.sale_date}</td></tr>`;
+      })
+      .join("");
   }
 
   // Low stock
   const lsBody = document.getElementById("low-stock-body");
   if (lowStock.length === 0) {
-    lsBody.innerHTML = '<tr><td colspan="3"><div class="empty-state"><p>✅ All products have sufficient stock</p></div></td></tr>';
+    lsBody.innerHTML =
+      '<tr><td colspan="3"><div class="empty-state"><p>✅ All products have sufficient stock</p></div></td></tr>';
   } else {
-    lsBody.innerHTML = lowStock.map((p) => {
-      const badge = p.stock_quantity === 0
-        ? `<span class="badge badge-red">Out of Stock</span>`
-        : `<span class="badge badge-yellow">Low</span>`;
-      return `<tr><td>${p.image_url} ${p.name}</td><td style="font-weight:700">${p.stock_quantity}</td><td>${badge}</td></tr>`;
-    }).join("");
+    lsBody.innerHTML = lowStock
+      .map((p) => {
+        const badge =
+          p.stock_quantity === 0
+            ? `<span class="badge badge-red">Out of Stock</span>`
+            : `<span class="badge badge-yellow">Low</span>`;
+        return `<tr><td>${p.image_url} ${p.name}</td><td style="font-weight:700">${p.stock_quantity}</td><td>${badge}</td></tr>`;
+      })
+      .join("");
   }
 }
 
@@ -134,19 +165,31 @@ function renderDashboard() {
 // ============================================================
 function setPosMode(mode) {
   posMode = mode;
-  document.getElementById("pos-tab-products").classList.toggle("active", mode === "products");
-  document.getElementById("pos-tab-bundles").classList.toggle("active", mode === "bundles");
-  document.getElementById("pos-products-view").style.display = mode === "products" ? "block" : "none";
-  document.getElementById("pos-bundles-view").style.display = mode === "bundles" ? "block" : "none";
+  document
+    .getElementById("pos-tab-products")
+    .classList.toggle("active", mode === "products");
+  document
+    .getElementById("pos-tab-bundles")
+    .classList.toggle("active", mode === "bundles");
+  document.getElementById("pos-products-view").style.display =
+    mode === "products" ? "block" : "none";
+  document.getElementById("pos-bundles-view").style.display =
+    mode === "bundles" ? "block" : "none";
   if (mode === "bundles") renderPosBundles();
 }
 
 function renderPos() {
-  const activeProducts = db.products.filter(p => p.is_active);
-  const cats = ["All", ...new Set(activeProducts.map((p) => getProductCategory(p)))];
+  const activeProducts = db.products.filter((p) => p.is_active);
+  const cats = [
+    "All",
+    ...new Set(activeProducts.map((p) => getProductCategory(p))),
+  ];
   const tabsEl = document.getElementById("pos-category-tabs");
   tabsEl.innerHTML = cats
-    .map((c) => `<button class="filter-tab ${c === posCategory ? "active" : ""}" onclick="filterPosCategory('${c}', this)">${c}</button>`)
+    .map(
+      (c) =>
+        `<button class="filter-tab ${c === posCategory ? "active" : ""}" onclick="filterPosCategory('${c}', this)">${c}</button>`,
+    )
     .join("");
 
   renderPosGrid();
@@ -155,7 +198,12 @@ function renderPos() {
   const sel = document.getElementById("credit-customer-id");
   sel.innerHTML =
     '<option value="">-- Piliin ang customer --</option>' +
-    db.customers.map((c) => `<option value="${c.id}">${c.first_name} ${c.last_name}</option>`).join("");
+    db.customers
+      .map(
+        (c) =>
+          `<option value="${c.id}">${c.first_name} ${c.last_name}</option>`,
+      )
+      .join("");
 
   renderCart();
   if (posMode === "bundles") renderPosBundles();
@@ -163,7 +211,9 @@ function renderPos() {
 
 function filterPosCategory(cat, el) {
   posCategory = cat;
-  document.querySelectorAll("#pos-category-tabs .filter-tab").forEach((t) => t.classList.remove("active"));
+  document
+    .querySelectorAll("#pos-category-tabs .filter-tab")
+    .forEach((t) => t.classList.remove("active"));
   if (el) el.classList.add("active");
   renderPosGrid();
 }
@@ -174,36 +224,50 @@ function filterPosProducts() {
 }
 
 function renderPosGrid() {
-  let prods = db.products.filter(p => p.is_active);
-  if (posCategory !== "All") prods = prods.filter((p) => getProductCategory(p) === posCategory);
-  if (posSearch) prods = prods.filter((p) => p.name.toLowerCase().includes(posSearch));
+  let prods = db.products.filter((p) => p.is_active);
+  if (posCategory !== "All")
+    prods = prods.filter((p) => getProductCategory(p) === posCategory);
+  if (posSearch)
+    prods = prods.filter((p) => p.name.toLowerCase().includes(posSearch));
 
   const grid = document.getElementById("pos-product-grid");
-  grid.innerHTML = prods.map((p) => {
-    const pricing = getProductPricing(p.id);
-    const cartItem = cart.find((c) => c.product_id === p.id);
-    const qty = cartItem ? cartItem.quantity : 0;
-    const selected = qty > 0 ? "selected" : "";
-    const stockBadge = p.stock_quantity <= 10
-      ? `<div style="font-size:10px;color:var(--red);margin-top:2px;">⚠️ ${p.stock_quantity} left</div>`
-      : "";
-    const retailPrice = pricing ? pricing.retail_price : 0;
-    return `
+  grid.innerHTML = prods
+    .map((p) => {
+      const pricing = getProductPricing(p.id);
+      const unitOptions = getProductUnitOptions(p.id);
+      const hasMultiUnits = unitOptions.length > 0;
+
+      // Total qty across all units in cart for this product
+      const qty = cart
+        .filter((c) => c.product_id === p.id)
+        .reduce((sum, c) => sum + c.quantity, 0);
+      const selected = qty > 0 ? "selected" : "";
+      const stockBadge =
+        p.stock_quantity <= 10
+          ? `<div style="font-size:10px;color:var(--red);margin-top:2px;">⚠️ ${p.stock_quantity} left</div>`
+          : "";
+      const retailPrice = pricing ? pricing.retail_price : 0;
+      const multiUnitBadge = hasMultiUnits
+        ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 Multi-unit</div>`
+        : "";
+      return `
     <div class="product-card ${selected}" onclick="addToCart(${p.id})">
       <div class="product-qty-badge">${qty}</div>
       <div class="product-emoji">${p.image_url}</div>
       <div class="product-name">${p.name}</div>
       <div class="product-price">${fmt(retailPrice)}</div>
       <div class="product-stock">${p.stock_quantity} pcs</div>
+      ${multiUnitBadge}
       ${stockBadge}
     </div>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function renderPosBundles() {
   const grid = document.getElementById("pos-bundle-grid");
   const empty = document.getElementById("pos-bundle-empty");
-  const activeBundles = db.bundles.filter(b => b.is_active);
+  const activeBundles = db.bundles.filter((b) => b.is_active);
 
   if (activeBundles.length === 0) {
     grid.style.display = "none";
@@ -213,27 +277,34 @@ function renderPosBundles() {
   grid.style.display = "grid";
   empty.style.display = "none";
 
-  grid.innerHTML = activeBundles.map((b) => {
-    const bItems = getBundleItems(b.id);
-    const retailTotal = getBundleRetailTotal(b.id);
-    const savings = retailTotal - b.bundle_price;
-    const cartB = cartBundles.find((x) => x.bundle_id === b.id);
-    const qty = cartB ? cartB.quantity : 0;
-    const selected = qty > 0 ? "selected" : "";
-    const itemsText = bItems.map((bi) => {
-      const p = db.products.find((x) => x.id === bi.product_id);
-      return p ? `${bi.quantity}× ${p.name}` : "";
-    }).filter(Boolean).join(", ");
+  grid.innerHTML = activeBundles
+    .map((b) => {
+      const bItems = getBundleItems(b.id);
+      const retailTotal = getBundleRetailTotal(b.id);
+      const savings = retailTotal - b.bundle_price;
+      const cartB = cartBundles.find((x) => x.bundle_id === b.id);
+      const qty = cartB ? cartB.quantity : 0;
+      const selected = qty > 0 ? "selected" : "";
+      const itemsText = bItems
+        .map((bi) => {
+          const p = db.products.find((x) => x.id === bi.product_id);
+          return p ? `${bi.quantity}× ${p.name}` : "";
+        })
+        .filter(Boolean)
+        .join(", ");
 
-    const hasStock = bItems.every((bi) => {
-      const p = db.products.find((x) => x.id === bi.product_id);
-      return p && p.stock_quantity >= bi.quantity;
-    });
+      const hasStock = bItems.every((bi) => {
+        const p = db.products.find((x) => x.id === bi.product_id);
+        return p && p.stock_quantity >= bi.quantity;
+      });
 
-    const firstProduct = bItems.length === 1 ? db.products.find(p => p.id === bItems[0].product_id) : null;
-    const emoji = firstProduct ? firstProduct.image_url : "🎁";
+      const firstProduct =
+        bItems.length === 1
+          ? db.products.find((p) => p.id === bItems[0].product_id)
+          : null;
+      const emoji = firstProduct ? firstProduct.image_url : "🎁";
 
-    return `
+      return `
     <div class="bundle-pos-card ${selected} ${!hasStock ? "opacity-50" : ""}" onclick="${hasStock ? `addBundleToCart(${b.id})` : ""}">
       <div class="bundle-pos-badge">${qty}</div>
       <div style="font-size:28px;margin-bottom:6px;">${emoji}</div>
@@ -245,23 +316,118 @@ function renderPosBundles() {
       </div>
       ${!hasStock ? `<div style="font-size:10px;color:var(--red);margin-top:4px;font-weight:600;">⚠️ Kulang ang stock</div>` : ""}
     </div>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function addToCart(product_id) {
   const product = db.products.find((p) => p.id === product_id);
   if (!product) return;
-  if (product.stock_quantity <= 0) { showToast("Wala nang stock!", "error"); return; }
+  if (product.stock_quantity <= 0) {
+    showToast("Wala nang stock!", "error");
+    return;
+  }
 
-  const existing = cart.find((c) => c.product_id === product_id);
+  // Check if product has multiple unit options
+  const unitOptions = getProductUnitOptions(product_id);
+  if (unitOptions.length > 0) {
+    // Show unit picker modal
+    openUnitPickerModal(product_id);
+    return;
+  }
+
+  // Default: add with product's default unit
+  addToCartWithUnit(product_id, product.unit_id);
+}
+
+function addToCartWithUnit(product_id, unit_id) {
+  const product = db.products.find((p) => p.id === product_id);
+  if (!product) return;
+  if (product.stock_quantity <= 0) {
+    showToast("Wala nang stock!", "error");
+    return;
+  }
+
+  // Cart key is product_id + unit_id combination
+  const existing = cart.find(
+    (c) => c.product_id === product_id && c.unit_id === unit_id,
+  );
   if (existing) {
-    if (existing.quantity >= product.stock_quantity) { showToast("Hindi na dagdag, ubos na stock!", "warning"); return; }
+    if (existing.quantity >= product.stock_quantity) {
+      showToast("Hindi na dagdag, ubos na stock!", "warning");
+      return;
+    }
     existing.quantity++;
   } else {
-    cart.push({ product_id, quantity: 1 });
+    cart.push({ product_id, unit_id, quantity: 1 });
   }
+  closeModal("modal-unit-picker");
   renderPosGrid();
   renderCart();
+}
+
+function openUnitPickerModal(product_id) {
+  const product = db.products.find((p) => p.id === product_id);
+  if (!product) return;
+  const unitOptions = getProductUnitOptions(product_id);
+  const defaultPricing = getProductPricing(product_id);
+  const defaultUnit = db.units.find((u) => u.id === product.unit_id);
+
+  document.getElementById("unit-picker-title").textContent =
+    `📦 Piliin ang Unit — ${product.name}`;
+  document.getElementById("unit-picker-product-info").innerHTML = `
+    <div style="font-size:28px">${product.image_url}</div>
+    <div>
+      <div style="font-weight:700;font-size:14px">${product.name}</div>
+      <div style="font-size:12px;color:var(--muted)">Stock: ${product.stock_quantity} ${defaultUnit ? defaultUnit.abbreviation : "pc"}</div>
+    </div>`;
+
+  // Build option buttons: default unit (from product_pricing) + additional units (from product_units)
+  let optionsHtml = "";
+
+  // Default unit option (from product_pricing)
+  if (defaultPricing) {
+    const cartItem = cart.find(
+      (c) => c.product_id === product_id && c.unit_id === product.unit_id,
+    );
+    const inCart = cartItem ? cartItem.quantity : 0;
+    optionsHtml += `
+    <button class="unit-picker-opt ${inCart > 0 ? "selected" : ""}" onclick="addToCartWithUnit(${product_id}, ${product.unit_id})">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:700">${defaultUnit ? defaultUnit.name : "piece"} <span style="font-size:11px;color:var(--muted)">(${defaultUnit ? defaultUnit.abbreviation : "pc"})</span></div>
+          <div style="font-size:12px;color:var(--muted)">Retail: ${fmt(defaultPricing.retail_price)} · Wholesale: ${fmt(defaultPricing.wholesale_price)} (${defaultPricing.wholesale_min_qty}+)</div>
+        </div>
+        <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(defaultPricing.retail_price)}</div>
+      </div>
+      ${inCart > 0 ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${inCart} in cart</div>` : ""}
+    </button>`;
+  }
+
+  // Additional unit options
+  unitOptions.forEach((pu) => {
+    if (pu.unit_id === product.unit_id) return; // skip if same as default (already shown)
+    const unit = db.units.find((u) => u.id === pu.unit_id);
+    const cartItem = cart.find(
+      (c) => c.product_id === product_id && c.unit_id === pu.unit_id,
+    );
+    const inCart = cartItem ? cartItem.quantity : 0;
+    const label = pu.label || (unit ? unit.name : "unit");
+    optionsHtml += `
+    <button class="unit-picker-opt ${inCart > 0 ? "selected" : ""}" onclick="addToCartWithUnit(${product_id}, ${pu.unit_id})">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:700">${label}</div>
+          <div style="font-size:12px;color:var(--muted)">Retail: ${fmt(pu.retail_price)} · Wholesale: ${fmt(pu.wholesale_price)} (${pu.wholesale_min_qty}+)</div>
+        </div>
+        <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(pu.retail_price)}</div>
+      </div>
+      ${inCart > 0 ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${inCart} in cart</div>` : ""}
+    </button>`;
+  });
+
+  document.getElementById("unit-picker-options").innerHTML = optionsHtml;
+  openModal("modal-unit-picker");
 }
 
 function addBundleToCart(bundle_id) {
@@ -277,8 +443,11 @@ function addBundleToCart(bundle_id) {
   }
 
   const existing = cartBundles.find((x) => x.bundle_id === bundle_id);
-  if (existing) { existing.quantity++; }
-  else { cartBundles.push({ bundle_id, quantity: 1 }); }
+  if (existing) {
+    existing.quantity++;
+  } else {
+    cartBundles.push({ bundle_id, quantity: 1 });
+  }
   renderPosBundles();
   renderCart();
 }
@@ -292,8 +461,10 @@ function changeBundleCartQty(bundle_id, delta) {
   renderCart();
 }
 
-function changeCartQty(product_id, delta) {
-  const idx = cart.findIndex((c) => c.product_id === product_id);
+function changeCartQty(product_id, unit_id, delta) {
+  const idx = cart.findIndex(
+    (c) => c.product_id === product_id && c.unit_id === unit_id,
+  );
   if (idx === -1) return;
   cart[idx].quantity += delta;
   if (cart[idx].quantity <= 0) cart.splice(idx, 1);
@@ -306,7 +477,8 @@ function renderCart() {
   const countEl = document.getElementById("cart-count");
 
   if (cart.length === 0 && cartBundles.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">🛒</div><p>Walang solud pa</p></div>';
+    el.innerHTML =
+      '<div class="empty-state"><div class="icon">🛒</div><p>Walang solud pa</p></div>';
     countEl.textContent = "";
     document.getElementById("cart-subtotal").textContent = "₱0.00";
     document.getElementById("cart-total").textContent = "₱0.00";
@@ -321,23 +493,48 @@ function renderCart() {
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
     if (!p) return;
-    const pricing = getProductPricing(p.id);
-    if (!pricing) return;
-    const unitPrice = item.quantity >= pricing.wholesale_min_qty ? pricing.wholesale_price : pricing.retail_price;
+
+    // Determine pricing: check product_units first, fall back to product_pricing
+    let unitPrice, saleTypeLabel;
+    const puPricing = getProductUnitPricing(p.id, item.unit_id);
+    const unit = db.units.find((u) => u.id === item.unit_id);
+    const unitLabel = unit ? `(${unit.abbreviation})` : "";
+
+    if (puPricing) {
+      unitPrice =
+        item.quantity >= puPricing.wholesale_min_qty
+          ? puPricing.wholesale_price
+          : puPricing.retail_price;
+      saleTypeLabel =
+        item.quantity >= puPricing.wholesale_min_qty
+          ? ' <span class="tag">Wholesale</span>'
+          : "";
+    } else {
+      const pricing = getProductPricing(p.id);
+      if (!pricing) return;
+      unitPrice =
+        item.quantity >= pricing.wholesale_min_qty
+          ? pricing.wholesale_price
+          : pricing.retail_price;
+      saleTypeLabel =
+        item.quantity >= pricing.wholesale_min_qty
+          ? ' <span class="tag">Wholesale</span>'
+          : "";
+    }
+
     const lineTotal = unitPrice * item.quantity;
     subtotal += lineTotal;
-    const typeLabel = item.quantity >= pricing.wholesale_min_qty ? ' <span class="tag">Wholesale</span>' : "";
     html += `
     <div class="cart-item">
       <div class="cart-item-emoji">${p.image_url}</div>
       <div class="cart-item-info">
-        <div class="cart-item-name">${p.name}${typeLabel}</div>
+        <div class="cart-item-name">${p.name} <span style="font-size:11px;color:var(--muted)">${unitLabel}</span>${saleTypeLabel}</div>
         <div class="cart-item-price">${fmt(unitPrice)} × ${item.quantity} = ${fmt(lineTotal)}</div>
       </div>
       <div class="cart-item-controls">
-        <button class="qty-btn" onclick="changeCartQty(${p.id},-1)">−</button>
+        <button class="qty-btn" onclick="changeCartQty(${p.id},${item.unit_id},-1)">−</button>
         <span class="qty-display">${item.quantity}</span>
-        <button class="qty-btn" onclick="changeCartQty(${p.id},1)">+</button>
+        <button class="qty-btn" onclick="changeCartQty(${p.id},${item.unit_id},1)">+</button>
       </div>
     </div>`;
   });
@@ -352,10 +549,14 @@ function renderCart() {
     subtotal += lineTotal;
     totalBundleSavings += savings;
 
-    const itemsText = bItems.map((bi) => {
-      const p = db.products.find((x) => x.id === bi.product_id);
-      return p ? `${p.image_url}${bi.quantity > 1 ? "×" + bi.quantity : ""}` : "";
-    }).join(" ");
+    const itemsText = bItems
+      .map((bi) => {
+        const p = db.products.find((x) => x.id === bi.product_id);
+        return p
+          ? `${p.image_url}${bi.quantity > 1 ? "×" + bi.quantity : ""}`
+          : "";
+      })
+      .join(" ");
 
     html += `
     <div class="cart-item cart-item-bundle">
@@ -375,7 +576,9 @@ function renderCart() {
   });
 
   el.innerHTML = html;
-  const totalItems = cart.reduce((a, b) => a + b.quantity, 0) + cartBundles.reduce((a, b) => a + b.quantity, 0);
+  const totalItems =
+    cart.reduce((a, b) => a + b.quantity, 0) +
+    cartBundles.reduce((a, b) => a + b.quantity, 0);
   countEl.textContent = `(${totalItems} items)`;
   document.getElementById("cart-subtotal").textContent = fmt(subtotal);
   document.getElementById("cart-total").textContent = fmt(subtotal);
@@ -383,7 +586,8 @@ function renderCart() {
   const savingsRow = document.getElementById("cart-savings-row");
   if (totalBundleSavings > 0) {
     savingsRow.style.display = "flex";
-    document.getElementById("cart-savings").textContent = `-${fmt(totalBundleSavings)}`;
+    document.getElementById("cart-savings").textContent =
+      `-${fmt(totalBundleSavings)}`;
   } else {
     savingsRow.style.display = "none";
   }
@@ -391,9 +595,14 @@ function renderCart() {
 
 function setPayType(type) {
   payType = type;
-  document.getElementById("pay-cash").classList.toggle("active", type === "cash");
-  document.getElementById("pay-credit").classList.toggle("active", type === "credit");
-  document.getElementById("credit-customer-select").style.display = type === "credit" ? "block" : "none";
+  document
+    .getElementById("pay-cash")
+    .classList.toggle("active", type === "cash");
+  document
+    .getElementById("pay-credit")
+    .classList.toggle("active", type === "credit");
+  document.getElementById("credit-customer-select").style.display =
+    type === "credit" ? "block" : "none";
 }
 
 function clearCart() {
@@ -405,12 +614,18 @@ function clearCart() {
 }
 
 function checkout() {
-  if (cart.length === 0 && cartBundles.length === 0) { showToast("Walang laman ang cart!", "warning"); return; }
+  if (cart.length === 0 && cartBundles.length === 0) {
+    showToast("Walang laman ang cart!", "warning");
+    return;
+  }
 
   let customerId = null;
   if (payType === "credit") {
     customerId = parseInt(document.getElementById("credit-customer-id").value);
-    if (!customerId) { showToast("Piliin ang customer para sa utang!", "warning"); return; }
+    if (!customerId) {
+      showToast("Piliin ang customer para sa utang!", "warning");
+      return;
+    }
 
     // Check credit limit using helper
     const customer = db.customers.find((c) => c.id === customerId);
@@ -419,7 +634,10 @@ function checkout() {
     let orderTotal = cart.reduce((sum, item) => {
       const p = db.products.find((x) => x.id === item.product_id);
       const pricing = getProductPricing(p.id);
-      const up = item.quantity >= pricing.wholesale_min_qty ? pricing.wholesale_price : pricing.retail_price;
+      const up =
+        item.quantity >= pricing.wholesale_min_qty
+          ? pricing.wholesale_price
+          : pricing.retail_price;
       return sum + up * item.quantity;
     }, 0);
     orderTotal += cartBundles.reduce((sum, cb) => {
@@ -428,13 +646,16 @@ function checkout() {
     }, 0);
 
     if (existingDebt + orderTotal > customer.credit_limit) {
-      showToast(`Lampas sa credit limit ni ${customer.first_name}! (${fmt(customer.credit_limit)})`, "error");
+      showToast(
+        `Lampas sa credit limit ni ${customer.first_name}! (${fmt(customer.credit_limit)})`,
+        "error",
+      );
       return;
     }
   }
 
   // Create sale — payment_type_id from payment_types table
-  const paymentTypeObj = db.payment_types.find(pt => pt.name === payType);
+  const paymentTypeObj = db.payment_types.find((pt) => pt.name === payType);
   const saleId = genId("sales");
   const saleDate = now();
   db.sales.push({
@@ -451,9 +672,27 @@ function checkout() {
   // Regular product items
   cart.forEach((item) => {
     const p = db.products.find((x) => x.id === item.product_id);
-    const pricing = getProductPricingAt(p.id, dateStr); // snapshot pricing at sale date
-    const unitPrice = item.quantity >= pricing.wholesale_min_qty ? pricing.wholesale_price : pricing.retail_price;
-    const saleType = item.quantity >= pricing.wholesale_min_qty ? "wholesale" : "retail";
+
+    // Resolve pricing: product_units first, then product_pricing
+    const puPricing = getProductUnitPricing(p.id, item.unit_id);
+    let unitPrice, saleType;
+    if (puPricing) {
+      unitPrice =
+        item.quantity >= puPricing.wholesale_min_qty
+          ? puPricing.wholesale_price
+          : puPricing.retail_price;
+      saleType =
+        item.quantity >= puPricing.wholesale_min_qty ? "wholesale" : "retail";
+    } else {
+      const pricing = getProductPricingAt(p.id, dateStr);
+      unitPrice =
+        item.quantity >= pricing.wholesale_min_qty
+          ? pricing.wholesale_price
+          : pricing.retail_price;
+      saleType =
+        item.quantity >= pricing.wholesale_min_qty ? "wholesale" : "retail";
+    }
+
     const lineTotal = unitPrice * item.quantity;
     total += lineTotal;
 
@@ -462,9 +701,9 @@ function checkout() {
       sale_id: saleId,
       product_id: item.product_id,
       bundle_id: null,
-      unit_id: p.unit_id,
+      unit_id: item.unit_id,
       quantity_sold: item.quantity,
-      unit_price: unitPrice,       // snapshotted price
+      unit_price: unitPrice,
       total_price: lineTotal,
       sale_type: saleType,
     });
@@ -474,7 +713,7 @@ function checkout() {
     db.stock_logs.push({
       id: genId("stock_logs"),
       product_id: p.id,
-      unit_id: p.unit_id,
+      unit_id: item.unit_id,
       stock_batch_id: null,
       change_qty: -item.quantity,
       reason: "sold",
@@ -482,7 +721,14 @@ function checkout() {
       created_at: dateStr,
     });
 
-    receiptItems.push({ name: p.name, qty: item.quantity, price: unitPrice, total: lineTotal, isBundle: false });
+    const unit = db.units.find((u) => u.id === item.unit_id);
+    receiptItems.push({
+      name: p.name + (unit ? ` (${unit.abbreviation})` : ""),
+      qty: item.quantity,
+      price: unitPrice,
+      total: lineTotal,
+      isBundle: false,
+    });
   });
 
   // Bundle items
@@ -502,7 +748,7 @@ function checkout() {
       bundle_id: bundle.id,
       unit_id: null,
       quantity_sold: cb.quantity,
-      unit_price: bundle.bundle_price,  // snapshotted bundle price
+      unit_price: bundle.bundle_price, // snapshotted bundle price
       total_price: lineTotal,
       sale_type: "bundle",
     });
@@ -542,10 +788,12 @@ function checkout() {
       price: bundle.bundle_price,
       total: lineTotal,
       isBundle: true,
-      bundleItems: bItems.map((bi) => {
-        const p = db.products.find((x) => x.id === bi.product_id);
-        return p ? `${p.name} ×${bi.quantity}` : "";
-      }).filter(Boolean),
+      bundleItems: bItems
+        .map((bi) => {
+          const p = db.products.find((x) => x.id === bi.product_id);
+          return p ? `${p.name} ×${bi.quantity}` : "";
+        })
+        .filter(Boolean),
     });
   });
 
@@ -571,11 +819,16 @@ function checkout() {
   renderCart();
   if (posMode === "bundles") renderPosBundles();
   updateUtangBadge();
-  showToast(payType === "credit" ? "Naitala ang utang!" : "Bayad na! Salamat!", "success");
+  showToast(
+    payType === "credit" ? "Naitala ang utang!" : "Bayad na! Salamat!",
+    "success",
+  );
 }
 
 function showReceipt(items, total, payType, customerId, date) {
-  const customer = customerId ? db.customers.find((c) => c.id === customerId) : null;
+  const customer = customerId
+    ? db.customers.find((c) => c.id === customerId)
+    : null;
   let html = `<div class="receipt">
     <div class="receipt-title">🏪 Tindahan ni Duane</div>
     <div class="receipt-sub">${date}</div>
@@ -595,7 +848,8 @@ function showReceipt(items, total, payType, customerId, date) {
     <hr class="receipt-divider">
     <div class="receipt-row"><span>Payment</span><span>${payType === "credit" ? "UTANG" : "CASH"}</span></div>`;
 
-  if (customer) html += `<div class="receipt-row"><span>Customer</span><span>${customer.first_name} ${customer.last_name}</span></div>`;
+  if (customer)
+    html += `<div class="receipt-row"><span>Customer</span><span>${customer.first_name} ${customer.last_name}</span></div>`;
   html += `<hr class="receipt-divider"><div style="text-align:center;font-size:11px;color:#888">Salamat sa inyong pagbili! 🙏</div></div>`;
 
   document.getElementById("receipt-content").innerHTML = html;
@@ -606,25 +860,35 @@ function showReceipt(items, total, payType, customerId, date) {
 // PRODUCTS
 // ============================================================
 function renderProducts() {
-  const search = (document.getElementById("product-search")?.value || "").toLowerCase();
-  let prods = db.products.filter(p => p.is_active);
-  if (search) prods = prods.filter((p) => p.name.toLowerCase().includes(search) || getProductCategory(p).toLowerCase().includes(search));
+  const search = (
+    document.getElementById("product-search")?.value || ""
+  ).toLowerCase();
+  let prods = db.products.filter((p) => p.is_active);
+  if (search)
+    prods = prods.filter(
+      (p) =>
+        p.name.toLowerCase().includes(search) ||
+        getProductCategory(p).toLowerCase().includes(search),
+    );
 
   const tbody = document.getElementById("products-body");
   if (prods.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><p>Walang produkto</p></div></td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="7"><div class="empty-state"><p>Walang produkto</p></div></td></tr>';
     return;
   }
 
-  tbody.innerHTML = prods.map((p) => {
-    const pricing = getProductPricing(p.id);
-    const stockBadge = p.stock_quantity === 0
-      ? `<span class="badge badge-red">Out</span>`
-      : p.stock_quantity <= 10
-        ? `<span class="badge badge-yellow">${p.stock_quantity}</span>`
-        : `<span class="badge badge-green">${p.stock_quantity}</span>`;
-    const catName = getProductCategory(p);
-    return `<tr>
+  tbody.innerHTML = prods
+    .map((p) => {
+      const pricing = getProductPricing(p.id);
+      const stockBadge =
+        p.stock_quantity === 0
+          ? `<span class="badge badge-red">Out</span>`
+          : p.stock_quantity <= 10
+            ? `<span class="badge badge-yellow">${p.stock_quantity}</span>`
+            : `<span class="badge badge-green">${p.stock_quantity}</span>`;
+      const catName = getProductCategory(p);
+      return `<tr>
     <td><span style="font-size:18px">${p.image_url}</span> <strong>${p.name}</strong></td>
     <td><span class="badge badge-blue">${catName}</span></td>
     <td>${stockBadge}</td>
@@ -636,17 +900,20 @@ function renderProducts() {
       <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">🗑</button>
     </td>
   </tr>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function openAddProduct() {
   editingProductId = null;
-  document.getElementById("product-modal-title").textContent = "Dagdag Produkto";
+  document.getElementById("product-modal-title").textContent =
+    "Dagdag Produkto";
   document.getElementById("p-name").value = "";
   document.getElementById("p-stock").value = "50";
   document.getElementById("p-retail").value = "1.00";
   document.getElementById("p-wholesale").value = "0.65";
   document.getElementById("p-minqty").value = "24";
+  renderProductUnitRows([]);
   openModal("modal-product");
 }
 
@@ -655,23 +922,38 @@ function editProduct(id) {
   if (!p) return;
   const pricing = getProductPricing(id);
   editingProductId = id;
-  document.getElementById("product-modal-title").textContent = "I-edit ang Produkto";
+  document.getElementById("product-modal-title").textContent =
+    "I-edit ang Produkto";
   document.getElementById("p-name").value = p.name;
   document.getElementById("p-category").value = p.product_category_id;
   document.getElementById("p-stock").value = p.stock_quantity;
-  document.getElementById("p-retail").value = pricing ? pricing.retail_price : "";
-  document.getElementById("p-wholesale").value = pricing ? pricing.wholesale_price : "";
-  document.getElementById("p-minqty").value = pricing ? pricing.wholesale_min_qty : "";
+  document.getElementById("p-retail").value = pricing
+    ? pricing.retail_price
+    : "";
+  document.getElementById("p-wholesale").value = pricing
+    ? pricing.wholesale_price
+    : "";
+  document.getElementById("p-minqty").value = pricing
+    ? pricing.wholesale_min_qty
+    : "";
+  // Load existing unit rows
+  const existingUnits = getProductUnitOptions(id);
+  renderProductUnitRows(existingUnits);
   openModal("modal-product");
 }
 
 function saveProduct() {
   const name = document.getElementById("p-name").value.trim();
-  if (!name) { showToast("Ilagay ang pangalan ng produkto!", "warning"); return; }
+  if (!name) {
+    showToast("Ilagay ang pangalan ng produkto!", "warning");
+    return;
+  }
 
   const catId = parseInt(document.getElementById("p-category").value);
   const retailPrice = parseFloat(document.getElementById("p-retail").value);
-  const wholesalePrice = parseFloat(document.getElementById("p-wholesale").value);
+  const wholesalePrice = parseFloat(
+    document.getElementById("p-wholesale").value,
+  );
   const wholesaleMinQty = parseInt(document.getElementById("p-minqty").value);
 
   if (editingProductId) {
@@ -683,7 +965,8 @@ function saveProduct() {
 
     // Add new pricing row with today's date (price history preserved)
     const existingPricing = getProductPricing(editingProductId);
-    const priceChanged = !existingPricing ||
+    const priceChanged =
+      !existingPricing ||
       existingPricing.retail_price !== retailPrice ||
       existingPricing.wholesale_price !== wholesalePrice ||
       existingPricing.wholesale_min_qty !== wholesaleMinQty;
@@ -698,6 +981,25 @@ function saveProduct() {
         effective_date: todayISO(),
       });
     }
+
+    // Replace product_units for this product with pendingProductUnits
+    db.product_units = db.product_units.filter(
+      (pu) => pu.product_id !== editingProductId,
+    );
+    pendingProductUnits.forEach((pu) => {
+      if (pu.retail_price > 0) {
+        db.product_units.push({
+          id: genId("product_units"),
+          product_id: editingProductId,
+          unit_id: pu.unit_id,
+          retail_price: pu.retail_price,
+          wholesale_price: pu.wholesale_price || 0,
+          wholesale_min_qty: pu.wholesale_min_qty || 10,
+          label: pu.label || "",
+        });
+      }
+    });
+
     showToast("Na-update ang produkto!");
   } else {
     const newId = genId("products");
@@ -719,6 +1021,22 @@ function saveProduct() {
       wholesale_min_qty: wholesaleMinQty,
       effective_date: todayISO(),
     });
+
+    // Save product_units
+    pendingProductUnits.forEach((pu) => {
+      if (pu.retail_price > 0) {
+        db.product_units.push({
+          id: genId("product_units"),
+          product_id: newId,
+          unit_id: pu.unit_id,
+          retail_price: pu.retail_price,
+          wholesale_price: pu.wholesale_price || 0,
+          wholesale_min_qty: pu.wholesale_min_qty || 10,
+          label: pu.label || "",
+        });
+      }
+    });
+
     showToast("Nadagdag ang produkto!");
   }
 
@@ -729,7 +1047,7 @@ function saveProduct() {
 function deleteProduct(id) {
   if (!confirm("Sigurado ka bang gusto mong i-delete?")) return;
   // Soft delete — preserve history
-  const p = db.products.find(x => x.id === id);
+  const p = db.products.find((x) => x.id === id);
   if (p) p.is_active = false;
   renderProducts();
   showToast("Na-delete ang produkto!", "warning");
@@ -741,32 +1059,123 @@ function getCategoryEmoji(catId) {
 }
 
 // ============================================================
+// PRODUCT UNIT MANAGEMENT (for product modal)
+// ============================================================
+let pendingProductUnits = []; // temp state while modal is open
+
+function renderProductUnitRows(existingUnits) {
+  // Clone existing units into pendingProductUnits
+  pendingProductUnits = existingUnits.map((pu) => ({ ...pu }));
+  redrawProductUnitRows();
+}
+
+function redrawProductUnitRows() {
+  const container = document.getElementById("p-unit-rows");
+  if (pendingProductUnits.length === 0) {
+    container.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:8px 0;font-style:italic;">No additional units. Click "+ Add Unit" to add one.</div>`;
+    return;
+  }
+  const unitOptions = db.units
+    .map(
+      (u) => `<option value="${u.id}">${u.name} (${u.abbreviation})</option>`,
+    )
+    .join("");
+  container.innerHTML = pendingProductUnits
+    .map(
+      (pu, i) => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:700;color:var(--muted)">Unit Option ${i + 1}</span>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeProductUnitRow(${i})">✕ Remove</button>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px">Unit</label>
+          <select class="form-select" id="pu-unit-${i}" style="font-size:13px" onchange="updatePendingUnit(${i},'unit_id',parseInt(this.value))">
+            ${db.units.map((u) => `<option value="${u.id}" ${u.id === pu.unit_id ? "selected" : ""}>${u.name} (${u.abbreviation})</option>`).join("")}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px">Label (optional)</label>
+          <input type="text" class="form-input" style="font-size:13px" id="pu-label-${i}" value="${pu.label || ""}" placeholder="e.g., Per Liter" onchange="updatePendingUnit(${i},'label',this.value)">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px">Retail Price (₱)</label>
+          <input type="number" class="form-input" style="font-size:13px" id="pu-retail-${i}" step="0.01" value="${pu.retail_price || ""}" placeholder="0.00" onchange="updatePendingUnit(${i},'retail_price',parseFloat(this.value))">
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px">Wholesale Price (₱)</label>
+          <input type="number" class="form-input" style="font-size:13px" id="pu-wholesale-${i}" step="0.01" value="${pu.wholesale_price || ""}" placeholder="0.00" onchange="updatePendingUnit(${i},'wholesale_price',parseFloat(this.value))">
+        </div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:11px">Wholesale Min Qty</label>
+          <input type="number" class="form-input" style="font-size:13px" id="pu-minqty-${i}" value="${pu.wholesale_min_qty || 10}" onchange="updatePendingUnit(${i},'wholesale_min_qty',parseInt(this.value))">
+        </div>
+      </div>
+    </div>`,
+    )
+    .join("");
+}
+
+function addProductUnitRow() {
+  pendingProductUnits.push({
+    unit_id: 1,
+    label: "",
+    retail_price: 0,
+    wholesale_price: 0,
+    wholesale_min_qty: 10,
+  });
+  redrawProductUnitRows();
+}
+
+function removeProductUnitRow(index) {
+  pendingProductUnits.splice(index, 1);
+  redrawProductUnitRows();
+}
+
+function updatePendingUnit(index, field, value) {
+  if (pendingProductUnits[index]) {
+    pendingProductUnits[index][field] = value;
+  }
+}
+
+// ============================================================
 // BUNDLE PRICING
 // ============================================================
 function renderBundlesPage() {
   const container = document.getElementById("bundles-list");
-  const activeBundles = db.bundles.filter(b => b.is_active);
+  const activeBundles = db.bundles.filter((b) => b.is_active);
   if (activeBundles.length === 0) {
     container.innerHTML = `<div class="empty-state"><div class="icon">🎁</div><p>Wala pang bundle deals. Gumawa na!</p></div>`;
     return;
   }
-  container.innerHTML = activeBundles.map((b) => {
-    const bItems = getBundleItems(b.id);
-    const retailTotal = getBundleRetailTotal(b.id);
-    const savings = retailTotal - b.bundle_price;
-    const savingsPct = retailTotal > 0 ? Math.round((savings / retailTotal) * 100) : 0;
-    const itemsText = bItems.map((bi) => {
-      const p = db.products.find((x) => x.id === bi.product_id);
-      return p ? `${bi.quantity}× ${p.name}` : "";
-    }).filter(Boolean).join(" + ");
+  container.innerHTML = activeBundles
+    .map((b) => {
+      const bItems = getBundleItems(b.id);
+      const retailTotal = getBundleRetailTotal(b.id);
+      const savings = retailTotal - b.bundle_price;
+      const savingsPct =
+        retailTotal > 0 ? Math.round((savings / retailTotal) * 100) : 0;
+      const itemsText = bItems
+        .map((bi) => {
+          const p = db.products.find((x) => x.id === bi.product_id);
+          return p ? `${bi.quantity}× ${p.name}` : "";
+        })
+        .filter(Boolean)
+        .join(" + ");
 
-    const isMulti = bItems.length > 1;
-    const emoji = !isMulti ? (db.products.find(p => p.id === bItems[0]?.product_id)?.image_url || "🎁") : "🎁";
-    const typeBadge = !isMulti
-      ? `<span class="badge badge-blue">Multi-pack</span>`
-      : `<span class="badge badge-green">Combo</span>`;
+      const isMulti = bItems.length > 1;
+      const emoji = !isMulti
+        ? db.products.find((p) => p.id === bItems[0]?.product_id)?.image_url ||
+          "🎁"
+        : "🎁";
+      const typeBadge = !isMulti
+        ? `<span class="badge badge-blue">Multi-pack</span>`
+        : `<span class="badge badge-green">Combo</span>`;
 
-    return `<div class="bundle-card">
+      return `<div class="bundle-card">
     <div class="bundle-icon">${emoji}</div>
     <div class="bundle-info">
       <div class="bundle-name">${b.bundle_name} ${typeBadge}</div>
@@ -782,13 +1191,15 @@ function renderBundlesPage() {
       <button class="btn btn-danger btn-sm" onclick="deleteBundle(${b.id})">🗑</button>
     </div>
   </div>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function openAddBundle() {
   editingBundleId = null;
   bundleSelectedItems = {};
-  document.getElementById("bundle-modal-title").textContent = "🎁 Gumawa ng Bundle";
+  document.getElementById("bundle-modal-title").textContent =
+    "🎁 Gumawa ng Bundle";
   document.getElementById("b-name").value = "";
   document.getElementById("b-price").value = "";
   document.getElementById("b-savings-preview").textContent = "";
@@ -806,9 +1217,12 @@ function editBundle(id) {
   editingBundleId = id;
   bundleSelectedItems = {};
   const bItems = getBundleItems(id);
-  bItems.forEach((bi) => { bundleSelectedItems[bi.product_id] = bi.quantity; });
+  bItems.forEach((bi) => {
+    bundleSelectedItems[bi.product_id] = bi.quantity;
+  });
 
-  document.getElementById("bundle-modal-title").textContent = "✏️ I-edit ang Bundle";
+  document.getElementById("bundle-modal-title").textContent =
+    "✏️ I-edit ang Bundle";
   document.getElementById("b-name").value = b.bundle_name;
   document.getElementById("b-price").value = b.bundle_price.toFixed(2);
 
@@ -835,7 +1249,7 @@ function editBundle(id) {
 function deleteBundle(id) {
   if (!confirm("I-delete ang bundle na ito?")) return;
   // Soft delete
-  const b = db.bundles.find(x => x.id === id);
+  const b = db.bundles.find((x) => x.id === id);
   if (b) b.is_active = false;
   renderBundlesPage();
   showToast("Na-delete ang bundle!", "warning");
@@ -843,11 +1257,15 @@ function deleteBundle(id) {
 
 function populateBundleSingleSelect() {
   const sel = document.getElementById("b-single-product");
-  sel.innerHTML = '<option value="">-- Pumili ng produkto --</option>' +
-    db.products.filter(p => p.is_active).map((p) => {
-      const pricing = getProductPricing(p.id);
-      return `<option value="${p.id}">${p.image_url} ${p.name} (${pricing ? fmt(pricing.retail_price) : "—"})</option>`;
-    }).join("");
+  sel.innerHTML =
+    '<option value="">-- Pumili ng produkto --</option>' +
+    db.products
+      .filter((p) => p.is_active)
+      .map((p) => {
+        const pricing = getProductPricing(p.id);
+        return `<option value="${p.id}">${p.image_url} ${p.name} (${pricing ? fmt(pricing.retail_price) : "—"})</option>`;
+      })
+      .join("");
   if (editingBundleId) {
     const bItems = getBundleItems(editingBundleId);
     if (bItems.length === 1) sel.value = bItems[0].product_id;
@@ -856,26 +1274,36 @@ function populateBundleSingleSelect() {
 
 function populateBundleMultiPicker() {
   const picker = document.getElementById("b-product-picker");
-  picker.innerHTML = db.products.filter(p => p.is_active).map((p) => {
-    const qty = bundleSelectedItems[p.id] || 0;
-    const sel = qty > 0 ? "selected" : "";
-    const pricing = getProductPricing(p.id);
-    return `<div class="bundle-product-pick ${sel}" id="bpick-${p.id}" onclick="toggleBundleProduct(${p.id})">
+  picker.innerHTML = db.products
+    .filter((p) => p.is_active)
+    .map((p) => {
+      const qty = bundleSelectedItems[p.id] || 0;
+      const sel = qty > 0 ? "selected" : "";
+      const pricing = getProductPricing(p.id);
+      return `<div class="bundle-product-pick ${sel}" id="bpick-${p.id}" onclick="toggleBundleProduct(${p.id})">
         <div class="bundle-product-pick-emoji">${p.image_url}</div>
         <div class="bundle-product-pick-name">${p.name}</div>
         <div class="bundle-product-pick-price">${pricing ? fmt(pricing.retail_price) : "—"}</div>
-        ${qty > 0 ? `<div class="bundle-qty-row" onclick="event.stopPropagation()">
+        ${
+          qty > 0
+            ? `<div class="bundle-qty-row" onclick="event.stopPropagation()">
           <label>Qty:</label>
           <input class="bundle-qty-input" type="number" min="1" value="${qty}" id="bqty-${p.id}" onchange="updateBundleQty(${p.id}, this.value)" onclick="event.stopPropagation()">
-        </div>` : ""}
+        </div>`
+            : ""
+        }
       </div>`;
-  }).join("");
+    })
+    .join("");
   renderBundleChips();
 }
 
 function toggleBundleProduct(product_id) {
-  if (bundleSelectedItems[product_id]) { delete bundleSelectedItems[product_id]; }
-  else { bundleSelectedItems[product_id] = 1; }
+  if (bundleSelectedItems[product_id]) {
+    delete bundleSelectedItems[product_id];
+  } else {
+    bundleSelectedItems[product_id] = 1;
+  }
   populateBundleMultiPicker();
   updateBundleSavingsPreview();
 }
@@ -891,26 +1319,51 @@ function renderBundleChips() {
   const wrap = document.getElementById("b-selected-chips-wrap");
   const chips = document.getElementById("b-selected-chips");
   const ids = Object.keys(bundleSelectedItems);
-  if (ids.length === 0) { wrap.style.display = "none"; return; }
+  if (ids.length === 0) {
+    wrap.style.display = "none";
+    return;
+  }
   wrap.style.display = "block";
-  chips.innerHTML = ids.map((pid) => {
-    const p = db.products.find((x) => x.id === parseInt(pid));
-    if (!p) return "";
-    return `<div class="bundle-item-chip">${p.image_url} ${p.name} ×${bundleSelectedItems[pid]}<button onclick="toggleBundleProduct(${pid})">×</button></div>`;
-  }).join("");
+  chips.innerHTML = ids
+    .map((pid) => {
+      const p = db.products.find((x) => x.id === parseInt(pid));
+      if (!p) return "";
+      return `<div class="bundle-item-chip">${p.image_url} ${p.name} ×${bundleSelectedItems[pid]}<button onclick="toggleBundleProduct(${pid})">×</button></div>`;
+    })
+    .join("");
 }
 
 function onBundleTypeChange() {
   const isSingle = document.getElementById("btype-single").checked;
-  document.getElementById("b-single-section").style.display = isSingle ? "block" : "none";
-  document.getElementById("b-multi-section").style.display = isSingle ? "none" : "block";
+  document.getElementById("b-single-section").style.display = isSingle
+    ? "block"
+    : "none";
+  document.getElementById("b-multi-section").style.display = isSingle
+    ? "none"
+    : "block";
 
-  document.getElementById("btype-single-opt").style.borderColor = isSingle ? "var(--accent)" : "var(--border)";
-  document.getElementById("btype-single-opt").style.background = isSingle ? "var(--accent-light)" : "white";
-  document.getElementById("btype-single-opt").querySelector("div:nth-child(2)").style.color = isSingle ? "var(--accent)" : "var(--muted)";
-  document.getElementById("btype-multi-opt").style.borderColor = !isSingle ? "var(--accent)" : "var(--border)";
-  document.getElementById("btype-multi-opt").style.background = !isSingle ? "var(--accent-light)" : "white";
-  document.getElementById("btype-multi-opt").querySelector("div:nth-child(2)").style.color = !isSingle ? "var(--accent)" : "var(--muted)";
+  document.getElementById("btype-single-opt").style.borderColor = isSingle
+    ? "var(--accent)"
+    : "var(--border)";
+  document.getElementById("btype-single-opt").style.background = isSingle
+    ? "var(--accent-light)"
+    : "white";
+  document
+    .getElementById("btype-single-opt")
+    .querySelector("div:nth-child(2)").style.color = isSingle
+    ? "var(--accent)"
+    : "var(--muted)";
+  document.getElementById("btype-multi-opt").style.borderColor = !isSingle
+    ? "var(--accent)"
+    : "var(--border)";
+  document.getElementById("btype-multi-opt").style.background = !isSingle
+    ? "var(--accent-light)"
+    : "white";
+  document
+    .getElementById("btype-multi-opt")
+    .querySelector("div:nth-child(2)").style.color = !isSingle
+    ? "var(--accent)"
+    : "var(--muted)";
 
   updateBundleSavingsPreview();
 }
@@ -918,7 +1371,10 @@ function onBundleTypeChange() {
 function updateBundleSavingsPreview() {
   const el = document.getElementById("b-savings-preview");
   const price = parseFloat(document.getElementById("b-price").value);
-  if (!price) { el.textContent = ""; return; }
+  if (!price) {
+    el.textContent = "";
+    return;
+  }
 
   let retailTotal = 0;
   const isSingle = document.getElementById("btype-single").checked;
@@ -949,9 +1405,15 @@ function updateBundleSavingsPreview() {
 
 function saveBundle() {
   const name = document.getElementById("b-name").value.trim();
-  if (!name) { showToast("Ilagay ang pangalan ng bundle!", "warning"); return; }
+  if (!name) {
+    showToast("Ilagay ang pangalan ng bundle!", "warning");
+    return;
+  }
   const price = parseFloat(document.getElementById("b-price").value);
-  if (!price || price <= 0) { showToast("Ilagay ang tamang bundle price!", "warning"); return; }
+  if (!price || price <= 0) {
+    showToast("Ilagay ang tamang bundle price!", "warning");
+    return;
+  }
 
   const isSingle = document.getElementById("btype-single").checked;
   let newItems = [];
@@ -959,13 +1421,26 @@ function saveBundle() {
   if (isSingle) {
     const pid = parseInt(document.getElementById("b-single-product").value);
     const qty = parseInt(document.getElementById("b-single-qty").value);
-    if (!pid) { showToast("Piliin ang produkto!", "warning"); return; }
-    if (!qty || qty < 2) { showToast("Bundle quantity dapat 2 o higit pa!", "warning"); return; }
+    if (!pid) {
+      showToast("Piliin ang produkto!", "warning");
+      return;
+    }
+    if (!qty || qty < 2) {
+      showToast("Bundle quantity dapat 2 o higit pa!", "warning");
+      return;
+    }
     newItems = [{ product_id: pid, quantity: qty, unit_id: 1 }];
   } else {
     const ids = Object.keys(bundleSelectedItems);
-    if (ids.length < 2) { showToast("Pumili ng 2 o higit pang produkto para sa combo!", "warning"); return; }
-    newItems = ids.map((pid) => ({ product_id: parseInt(pid), quantity: bundleSelectedItems[pid], unit_id: 1 }));
+    if (ids.length < 2) {
+      showToast("Pumili ng 2 o higit pang produkto para sa combo!", "warning");
+      return;
+    }
+    newItems = ids.map((pid) => ({
+      product_id: parseInt(pid),
+      quantity: bundleSelectedItems[pid],
+      unit_id: 1,
+    }));
   }
 
   if (editingBundleId) {
@@ -974,16 +1449,31 @@ function saveBundle() {
     b.bundle_price = price;
 
     // Replace bundle_items rows for this bundle
-    db.bundle_items = db.bundle_items.filter(bi => bi.bundle_id !== editingBundleId);
-    newItems.forEach(item => {
-      db.bundle_items.push({ id: genId("bundle_items"), bundle_id: editingBundleId, ...item });
+    db.bundle_items = db.bundle_items.filter(
+      (bi) => bi.bundle_id !== editingBundleId,
+    );
+    newItems.forEach((item) => {
+      db.bundle_items.push({
+        id: genId("bundle_items"),
+        bundle_id: editingBundleId,
+        ...item,
+      });
     });
     showToast("Na-update ang bundle!");
   } else {
     const newBundleId = genId("bundles");
-    db.bundles.push({ id: newBundleId, bundle_name: name, bundle_price: price, is_active: true });
-    newItems.forEach(item => {
-      db.bundle_items.push({ id: genId("bundle_items"), bundle_id: newBundleId, ...item });
+    db.bundles.push({
+      id: newBundleId,
+      bundle_name: name,
+      bundle_price: price,
+      is_active: true,
+    });
+    newItems.forEach((item) => {
+      db.bundle_items.push({
+        id: genId("bundle_items"),
+        bundle_id: newBundleId,
+        ...item,
+      });
     });
     showToast("Nadagdag ang bundle!");
   }
@@ -999,32 +1489,35 @@ function renderStockLogs() {
   const tbody = document.getElementById("stocklogs-body");
   const logs = [...db.stock_logs].reverse();
   if (logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No stock logs yet</p></div></td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="6"><div class="empty-state"><p>No stock logs yet</p></div></td></tr>';
     return;
   }
 
-  tbody.innerHTML = logs.map((l) => {
-    const p = db.products.find((x) => x.id === l.product_id);
-    const pname = p ? `${p.image_url} ${p.name}` : "?";
-    const qtyColor = l.change_qty > 0 ? "var(--green)" : "var(--red)";
-    const qtyStr = l.change_qty > 0 ? `+${l.change_qty}` : `${l.change_qty}`;
+  tbody.innerHTML = logs
+    .map((l) => {
+      const p = db.products.find((x) => x.id === l.product_id);
+      const pname = p ? `${p.image_url} ${p.name}` : "?";
+      const qtyColor = l.change_qty > 0 ? "var(--green)" : "var(--red)";
+      const qtyStr = l.change_qty > 0 ? `+${l.change_qty}` : `${l.change_qty}`;
 
-    // Show batch expiry if linked to a stock_batch
-    let expiryStr = "—";
-    if (l.stock_batch_id) {
-      const batch = db.stock_batches.find(b => b.id === l.stock_batch_id);
-      if (batch && batch.expiration_date) expiryStr = batch.expiration_date;
-    }
+      // Show batch expiry if linked to a stock_batch
+      let expiryStr = "—";
+      if (l.stock_batch_id) {
+        const batch = db.stock_batches.find((b) => b.id === l.stock_batch_id);
+        if (batch && batch.expiration_date) expiryStr = batch.expiration_date;
+      }
 
-    const reasonBadge = {
-      restocked: '<span class="badge badge-green">Restock</span>',
-      sold: '<span class="badge badge-blue">Sold</span>',
-      damaged: '<span class="badge badge-red">Damaged</span>',
-      expired: '<span class="badge badge-yellow">Expired</span>',
-      adjustment: '<span class="badge badge-blue">Adjustment</span>',
-    }[l.reason] || l.reason;
+      const reasonBadge =
+        {
+          restocked: '<span class="badge badge-green">Restock</span>',
+          sold: '<span class="badge badge-blue">Sold</span>',
+          damaged: '<span class="badge badge-red">Damaged</span>',
+          expired: '<span class="badge badge-yellow">Expired</span>',
+          adjustment: '<span class="badge badge-blue">Adjustment</span>',
+        }[l.reason] || l.reason;
 
-    return `<tr>
+      return `<tr>
     <td>${pname}</td>
     <td style="color:${qtyColor};font-weight:700">${qtyStr}</td>
     <td>${reasonBadge}</td>
@@ -1032,13 +1525,16 @@ function renderStockLogs() {
     <td style="color:var(--muted);font-size:12px">${l.notes || "—"}</td>
     <td style="color:var(--muted);font-size:12px">${l.created_at}</td>
   </tr>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function openStockLog() {
   const sel = document.getElementById("sl-product");
-  sel.innerHTML = db.products.filter(p => p.is_active)
-    .map((p) => `<option value="${p.id}">${p.image_url} ${p.name}</option>`).join("");
+  sel.innerHTML = db.products
+    .filter((p) => p.is_active)
+    .map((p) => `<option value="${p.id}">${p.image_url} ${p.name}</option>`)
+    .join("");
   document.getElementById("sl-qty").value = "";
   document.getElementById("sl-notes").value = "";
   document.getElementById("sl-expiry").value = "";
@@ -1052,7 +1548,10 @@ function saveStockLog() {
   const notes = document.getElementById("sl-notes").value;
   const expiryDate = document.getElementById("sl-expiry").value;
 
-  if (!change_qty) { showToast("Ilagay ang quantity!", "warning"); return; }
+  if (!change_qty) {
+    showToast("Ilagay ang quantity!", "warning");
+    return;
+  }
 
   const p = db.products.find((x) => x.id === product_id);
   p.stock_quantity += change_qty;
@@ -1086,7 +1585,9 @@ function saveStockLog() {
 
   closeModal("modal-stock");
   renderStockLogs();
-  showToast(`Stock updated! ${change_qty > 0 ? "+" + change_qty : change_qty} sa ${p.name}`);
+  showToast(
+    `Stock updated! ${change_qty > 0 ? "+" + change_qty : change_qty} sa ${p.name}`,
+  );
 }
 
 // ============================================================
@@ -1096,28 +1597,39 @@ function renderSales() {
   const tbody = document.getElementById("sales-body");
   const sales = [...db.sales].reverse();
   if (sales.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No sales yet</p></div></td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="6"><div class="empty-state"><p>No sales yet</p></div></td></tr>';
     return;
   }
 
-  tbody.innerHTML = sales.map((s) => {
-    const items = db.sale_items.filter((i) => i.sale_id === s.id);
-    const total = items.reduce((a, b) => a + b.total_price, 0);
-    const names = items.map((i) => {
-      if (i.bundle_id) {
-        const b = db.bundles.find(x => x.id === i.bundle_id);
-        return b ? `🎁 ${b.bundle_name}` : "?";
-      }
-      const p = db.products.find((x) => x.id === i.product_id);
-      return p ? p.name : "?";
-    }).join(", ");
-    const paymentType = db.payment_types.find(pt => pt.id === s.payment_type_id);
-    const pt = paymentType?.name === "credit"
-      ? `<span class="badge badge-red">Utang</span>`
-      : `<span class="badge badge-green">Cash</span>`;
-    const customer = s.customer_id ? db.customers.find((c) => c.id === s.customer_id) : null;
-    const cname = customer ? `${customer.first_name} ${customer.last_name}` : "—";
-    return `<tr>
+  tbody.innerHTML = sales
+    .map((s) => {
+      const items = db.sale_items.filter((i) => i.sale_id === s.id);
+      const total = items.reduce((a, b) => a + b.total_price, 0);
+      const names = items
+        .map((i) => {
+          if (i.bundle_id) {
+            const b = db.bundles.find((x) => x.id === i.bundle_id);
+            return b ? `🎁 ${b.bundle_name}` : "?";
+          }
+          const p = db.products.find((x) => x.id === i.product_id);
+          return p ? p.name : "?";
+        })
+        .join(", ");
+      const paymentType = db.payment_types.find(
+        (pt) => pt.id === s.payment_type_id,
+      );
+      const pt =
+        paymentType?.name === "credit"
+          ? `<span class="badge badge-red">Utang</span>`
+          : `<span class="badge badge-green">Cash</span>`;
+      const customer = s.customer_id
+        ? db.customers.find((c) => c.id === s.customer_id)
+        : null;
+      const cname = customer
+        ? `${customer.first_name} ${customer.last_name}`
+        : "—";
+      return `<tr>
     <td style="color:var(--muted)">#${s.id}</td>
     <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${names}</td>
     <td>${pt}</td>
@@ -1125,7 +1637,8 @@ function renderSales() {
     <td style="color:var(--accent);font-weight:700">${fmt(total)}</td>
     <td style="color:var(--muted);font-size:12px">${s.sale_date}</td>
   </tr>`;
-  }).join("");
+    })
+    .join("");
 }
 
 // ============================================================
@@ -1135,39 +1648,48 @@ function renderCredits() {
   const list = document.getElementById("credits-list");
 
   // Compute total from credit_transactions minus credit_payments
-  const totalUtang = db.credit_transactions.reduce((sum, ct) => sum + getCreditBalance(ct), 0);
-  document.getElementById("total-utang-display").textContent = `Total: ${fmt(totalUtang)}`;
+  const totalUtang = db.credit_transactions.reduce(
+    (sum, ct) => sum + getCreditBalance(ct),
+    0,
+  );
+  document.getElementById("total-utang-display").textContent =
+    `Total: ${fmt(totalUtang)}`;
 
   if (db.credit_transactions.length === 0) {
-    list.innerHTML = '<div class="empty-state"><div class="icon">📒</div><p>Walang utang records</p></div>';
+    list.innerHTML =
+      '<div class="empty-state"><div class="icon">📒</div><p>Walang utang records</p></div>';
     return;
   }
 
-  list.innerHTML = db.credit_transactions.map((ct) => {
-    const customer = db.customers.find((c) => c.id === ct.customer_id);
-    if (!customer) return "";
-    const name = `${customer.first_name} ${customer.last_name}`;
-    const initials = customer.first_name[0] + customer.last_name[0];
-    const remaining = getCreditBalance(ct);
-    const totalPaid = ct.amount_owed - remaining;
-    const pct = Math.min((totalPaid / ct.amount_owed) * 100, 100);
-    const status = getCreditStatus(ct);
+  list.innerHTML = db.credit_transactions
+    .map((ct) => {
+      const customer = db.customers.find((c) => c.id === ct.customer_id);
+      if (!customer) return "";
+      const name = `${customer.first_name} ${customer.last_name}`;
+      const initials = customer.first_name[0] + customer.last_name[0];
+      const remaining = getCreditBalance(ct);
+      const totalPaid = ct.amount_owed - remaining;
+      const pct = Math.min((totalPaid / ct.amount_owed) * 100, 100);
+      const status = getCreditStatus(ct);
 
-    const statusBadge = {
-      paid: '<span class="badge badge-green">Bayad na</span>',
-      partial: '<span class="badge badge-yellow">Partial</span>',
-      unpaid: '<span class="badge badge-red">Hindi pa bayad</span>',
-    }[status];
+      const statusBadge = {
+        paid: '<span class="badge badge-green">Bayad na</span>',
+        partial: '<span class="badge badge-yellow">Partial</span>',
+        unpaid: '<span class="badge badge-red">Hindi pa bayad</span>',
+      }[status];
 
-    // Payment history entries for this transaction
-    const payments = db.credit_payments.filter(p => p.credit_transaction_id === ct.id);
-    const payHistoryHtml = payments.length > 0
-      ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">
-           💳 Payments: ${payments.map(p => `${fmt(p.amount_paid)} (${p.paid_at})`).join(", ")}
+      // Payment history entries for this transaction
+      const payments = db.credit_payments.filter(
+        (p) => p.credit_transaction_id === ct.id,
+      );
+      const payHistoryHtml =
+        payments.length > 0
+          ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">
+           💳 Payments: ${payments.map((p) => `${fmt(p.amount_paid)} (${p.paid_at})`).join(", ")}
          </div>`
-      : "";
+          : "";
 
-    return `<div class="credit-card">
+      return `<div class="credit-card">
     <div class="credit-avatar">${initials}</div>
     <div class="credit-info">
       <div class="credit-name">${name} ${statusBadge}</div>
@@ -1180,7 +1702,8 @@ function renderCredits() {
       ${status !== "paid" ? `<button class="btn btn-success btn-sm" style="margin-top:6px" onclick="openPayUtang(${ct.id})">💰 Bayad</button>` : ""}
     </div>
   </div>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function openPayUtang(creditTransactionId) {
@@ -1201,9 +1724,14 @@ function openPayUtang(creditTransactionId) {
 
 function processUtangPayment() {
   const amount = parseFloat(document.getElementById("pay-utang-amount").value);
-  if (!amount || amount <= 0) { showToast("Invalid na amount!", "error"); return; }
+  if (!amount || amount <= 0) {
+    showToast("Invalid na amount!", "error");
+    return;
+  }
 
-  const ct = db.credit_transactions.find((c) => c.id === payingCreditTransactionId);
+  const ct = db.credit_transactions.find(
+    (c) => c.id === payingCreditTransactionId,
+  );
   const remaining = getCreditBalance(ct);
   const actualPaid = Math.min(amount, remaining);
 
@@ -1223,7 +1751,9 @@ function processUtangPayment() {
 }
 
 function updateUtangBadge() {
-  const unpaid = db.credit_transactions.filter(ct => getCreditBalance(ct) > 0).length;
+  const unpaid = db.credit_transactions.filter(
+    (ct) => getCreditBalance(ct) > 0,
+  ).length;
   const badge = document.getElementById("utang-badge");
   if (unpaid > 0) {
     badge.style.display = "inline";
@@ -1242,7 +1772,12 @@ function renderExpenses() {
 
   const total = db.expenses.reduce((sum, e) => sum + e.amount, 0);
   const totalSales = db.sales.reduce((sum, s) => {
-    return sum + db.sale_items.filter((i) => i.sale_id === s.id).reduce((a, b) => a + b.total_price, 0);
+    return (
+      sum +
+      db.sale_items
+        .filter((i) => i.sale_id === s.id)
+        .reduce((a, b) => a + b.total_price, 0)
+    );
   }, 0);
 
   document.getElementById("exp-total").textContent = fmt(total);
@@ -1253,19 +1788,24 @@ function renderExpenses() {
   netEl.style.color = net >= 0 ? "var(--green)" : "var(--red)";
 
   if (expenses.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state"><p>No expenses yet</p></div></td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="4"><div class="empty-state"><p>No expenses yet</p></div></td></tr>';
     return;
   }
 
-  tbody.innerHTML = expenses.map((e) => {
-    const cat = db.expense_categories.find((c) => c.id === e.expense_category_id);
-    return `<tr>
+  tbody.innerHTML = expenses
+    .map((e) => {
+      const cat = db.expense_categories.find(
+        (c) => c.id === e.expense_category_id,
+      );
+      return `<tr>
     <td><span class="badge badge-blue">${cat ? cat.name : "?"}</span></td>
     <td style="color:var(--red);font-weight:700">${fmt(e.amount)}</td>
     <td style="color:var(--muted)">${e.notes || "—"}</td>
     <td style="color:var(--muted);font-size:12px">${e.created_at}</td>
   </tr>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function openAddExpense() {
@@ -1276,7 +1816,10 @@ function saveExpense() {
   const catName = document.getElementById("e-category").value;
   const cat = db.expense_categories.find((c) => c.name === catName);
   const amount = parseFloat(document.getElementById("e-amount").value);
-  if (!amount || amount <= 0) { showToast("Ilagay ang tamang amount!", "warning"); return; }
+  if (!amount || amount <= 0) {
+    showToast("Ilagay ang tamang amount!", "warning");
+    return;
+  }
 
   db.expenses.push({
     id: genId("expenses"),
@@ -1297,15 +1840,18 @@ function saveExpense() {
 function renderCustomers() {
   const tbody = document.getElementById("customers-body");
   if (db.customers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><p>No customers</p></div></td></tr>';
+    tbody.innerHTML =
+      '<tr><td colspan="6"><div class="empty-state"><p>No customers</p></div></td></tr>';
     return;
   }
 
-  tbody.innerHTML = db.customers.map((c) => {
-    const totalDebt = getCustomerDebt(c.id);
-    const pct = Math.min((totalDebt / c.credit_limit) * 100, 100);
-    const debtColor = pct > 80 ? "var(--red)" : pct > 50 ? "var(--warning)" : "var(--green)";
-    return `<tr>
+  tbody.innerHTML = db.customers
+    .map((c) => {
+      const totalDebt = getCustomerDebt(c.id);
+      const pct = Math.min((totalDebt / c.credit_limit) * 100, 100);
+      const debtColor =
+        pct > 80 ? "var(--red)" : pct > 50 ? "var(--warning)" : "var(--green)";
+      return `<tr>
     <td><strong>${c.first_name} ${c.last_name}</strong></td>
     <td style="color:var(--muted)">${c.contact_number || "—"}</td>
     <td style="color:var(--muted);font-size:12px">${c.barangay || "—"}</td>
@@ -1318,7 +1864,8 @@ function renderCustomers() {
       <button class="btn btn-ghost btn-sm" onclick="editCustomerLimit(${c.id})">✏️ Limit</button>
     </td>
   </tr>`;
-  }).join("");
+    })
+    .join("");
 }
 
 function openAddCustomer() {
@@ -1328,7 +1875,10 @@ function openAddCustomer() {
 function saveCustomer() {
   const fname = document.getElementById("c-fname").value.trim();
   const lname = document.getElementById("c-lname").value.trim();
-  if (!fname || !lname) { showToast("Ilagay ang pangalan!", "warning"); return; }
+  if (!fname || !lname) {
+    showToast("Ilagay ang pangalan!", "warning");
+    return;
+  }
 
   db.customers.push({
     id: genId("customers"),
@@ -1349,7 +1899,10 @@ function saveCustomer() {
 
 function editCustomerLimit(id) {
   const c = db.customers.find((x) => x.id === id);
-  const newLimit = prompt(`Credit limit ni ${c.first_name} ${c.last_name}:`, c.credit_limit);
+  const newLimit = prompt(
+    `Credit limit ni ${c.first_name} ${c.last_name}:`,
+    c.credit_limit,
+  );
   if (newLimit !== null && !isNaN(parseFloat(newLimit))) {
     c.credit_limit = parseFloat(newLimit);
     renderCustomers();
@@ -1364,7 +1917,11 @@ function updateClock() {
   const el = document.getElementById("clock");
   const n = new Date();
   el.textContent =
-    n.toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" }) +
+    n.toLocaleDateString("en-PH", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }) +
     " · " +
     n.toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
 }

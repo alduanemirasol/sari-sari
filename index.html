@@ -487,6 +487,20 @@
                     <label class="form-label">Min Qty for Wholesale</label>
                     <input type="number" class="form-input" id="p-minqty" value="24">
                 </div>
+
+                <!-- Multi-unit section -->
+                <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <label class="form-label" style="margin:0">📦 Additional Selling Units</label>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="addProductUnitRow()">+ Add
+                            Unit</button>
+                    </div>
+                    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+                        Add alternative units customers can buy (e.g., sell per piece AND per liter, each with its own
+                        price).
+                    </div>
+                    <div id="p-unit-rows"></div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-ghost" onclick="closeModal('modal-product')">Cancel</button>
@@ -735,6 +749,25 @@
             <div class="modal-footer">
                 <button class="btn btn-ghost" onclick="closeModal('modal-pay-utang')">Cancel</button>
                 <button class="btn btn-success" onclick="processUtangPayment()">✅ Bayad</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unit Picker Modal (POS) -->
+    <div class="modal-overlay" id="modal-unit-picker">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-header">
+                <span class="modal-title" id="unit-picker-title">📦 Piliin ang Unit</span>
+                <button class="modal-close" onclick="closeModal('modal-unit-picker')">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="unit-picker-product-info"
+                    style="margin-bottom:14px;padding:10px;background:var(--bg);border-radius:8px;display:flex;align-items:center;gap:10px;">
+                </div>
+                <div id="unit-picker-options" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('modal-unit-picker')">Cancel</button>
             </div>
         </div>
     </div>
