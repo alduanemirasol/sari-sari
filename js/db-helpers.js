@@ -152,27 +152,62 @@ function resolveUnitPrice(product_id, unit_id, quantity, dateStr) {
 }
 
 /**
- * Convert a quantity from sold_unit_id into the product's base unit_id
- * using the unit_conversions table.  Returns quantity unchanged if same unit
- * or no conversion path is found (logs a warning).
+ * Get the product-specific package conversion for a product, if it exists.
+ * Returns the product_package_conversions row or null.
  */
-function convertToBaseUnits(quantity, sold_unit_id, base_unit_id) {
+function getProductPackageConversion(product_id) {
+  if (!db.product_package_conversions) return null;
+  return (
+    db.product_package_conversions.find((c) => c.product_id === product_id) ||
+    null
+  );
+}
+
+/**
+ * Convert a quantity from sold_unit_id into the product's base unit_id.
+ * Resolution order:
+ *   1. Same unit → no-op
+ *   2. product_package_conversions (product-specific pack→piece, e.g. 1 pack = 30 pc)
+ *   3. Global unit_conversions table (physical: 1L = 1000ml, 1kg = 1000g)
+ *   4. No path found → assume 1:1 and warn
+ */
+function convertToBaseUnits(quantity, sold_unit_id, base_unit_id, product_id) {
   if (sold_unit_id === base_unit_id) return quantity;
 
-  // Direct: sold → base
+  // 1. Product-specific pack conversion (e.g. 1 pack of Snow Bear = 30 pieces)
+  if (product_id != null) {
+    const pkgConv = getProductPackageConversion(product_id);
+    if (pkgConv) {
+      // pack → base (pieces)
+      if (
+        sold_unit_id === pkgConv.pack_unit_id &&
+        base_unit_id === pkgConv.base_unit_id
+      ) {
+        return quantity * pkgConv.pieces_per_pack;
+      }
+      // base (pieces) → pack  (used when checking cart totals against stock)
+      if (
+        sold_unit_id === pkgConv.base_unit_id &&
+        base_unit_id === pkgConv.pack_unit_id
+      ) {
+        return quantity / pkgConv.pieces_per_pack;
+      }
+    }
+  }
+
+  // 2. Global physical conversions (L↔ml, kg↔g)
   const direct = db.unit_conversions.find(
     (uc) => uc.from_unit_id === sold_unit_id && uc.to_unit_id === base_unit_id,
   );
   if (direct) return quantity * direct.factor;
 
-  // Inverse: base → sold  (divide)
   const inverse = db.unit_conversions.find(
     (uc) => uc.from_unit_id === base_unit_id && uc.to_unit_id === sold_unit_id,
   );
   if (inverse) return quantity / inverse.factor;
 
   console.warn(
-    `tindahan: no unit_conversion found from unit_id ${sold_unit_id} → ${base_unit_id}. Assuming 1:1.`,
+    `tindahan: no unit_conversion found from unit_id ${sold_unit_id} → ${base_unit_id} for product ${product_id}. Assuming 1:1.`,
   );
   return quantity;
 }

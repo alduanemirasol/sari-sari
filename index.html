@@ -482,39 +482,13 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Base Unit</label>
-                        <select class="form-select" id="p-unit" onchange="onProductUnitChange()">
-                            <option value="1">Piece (pc)</option>
-                            <option value="2">Liter (L)</option>
-                            <option value="3">Milliliter (ml)</option>
-                            <option value="4">Kilogram (kg)</option>
-                            <option value="5">Gram (g)</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Stock qty row — label and hint update based on selected unit -->
-                <div class="form-row" style="align-items:flex-end;">
-                    <div class="form-group" style="flex:1;">
-                        <label class="form-label" id="p-stock-label">Stock Qty</label>
-                        <div style="position:relative;">
-                            <input type="number" class="form-input" id="p-stock" value="50" step="1"
-                                style="padding-right:48px;">
-                            <span id="p-stock-unit-badge"
-                                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:700;color:var(--muted);pointer-events:none;">pc</span>
-                        </div>
-                        <div id="p-stock-hint" style="font-size:11px;color:var(--muted);margin-top:3px;">Number of
-                            individual pieces in stock.</div>
-                    </div>
-                    <div class="form-group" style="flex:1;" id="p-stock-secondary-wrap" style="display:none;">
-                        <!-- populated by onProductUnitChange() for weight/volume units -->
+                        <label class="form-label">Stock Qty</label>
+                        <input type="number" class="form-input" id="p-stock" value="50">
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Retail Price (₱)</label>
                     <input type="number" class="form-input" id="p-retail" step="0.01" value="1.00">
-                    <div id="p-retail-hint" style="font-size:11px;color:var(--muted);margin-top:3px;">Price per piece.
-                    </div>
                 </div>
                 <div class="form-group" style="margin-bottom:8px;">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
@@ -536,6 +510,43 @@
                         <div class="form-group">
                             <label class="form-label">Min Qty for Wholesale</label>
                             <input type="number" class="form-input" id="p-minqty" value="24">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Package conversion section -->
+                <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+                            <input type="checkbox" id="p-pkg-enabled" onchange="togglePackageSection()"
+                                style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+                            <span class="form-label" style="margin:0;cursor:pointer;">📦 Enable Package Unit
+                                (Pack)</span>
+                        </label>
+                        <div style="font-size:12px;color:var(--muted);margin-top:3px;margin-left:24px;">
+                            Define how many pieces are in one pack (e.g. 1 pack = 30 pieces). Enables pack-based
+                            restocking and selling.
+                        </div>
+                    </div>
+                    <div id="p-pkg-details"
+                        style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:4px;">
+                        <div class="form-row" style="align-items:flex-end;">
+                            <div class="form-group" style="flex:0 0 auto;min-width:160px;">
+                                <label class="form-label" style="font-size:12px;">Package Unit</label>
+                                <div class="form-input"
+                                    style="background:#f1f5f9;color:var(--muted);cursor:default;font-size:13px;display:flex;align-items:center;gap:6px;">
+                                    📦 Pack (pk)
+                                </div>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label class="form-label" style="font-size:12px;">Pieces per Pack</label>
+                                <input type="number" class="form-input" id="p-pkg-pieces" min="2" placeholder="e.g. 30"
+                                    style="font-size:13px;">
+                            </div>
+                        </div>
+                        <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+                            💡 Example: enter <strong>30</strong> if 1 pack = 30 pieces.
+                            Stock will always be tracked in pieces; packs auto-convert on restock and POS.
                         </div>
                     </div>
                 </div>
@@ -571,11 +582,31 @@
             <div class="modal-body">
                 <div class="form-group">
                     <label class="form-label">Product</label>
-                    <select class="form-select" id="sl-product"></select>
+                    <select class="form-select" id="sl-product" onchange="onStockProductChange()"></select>
                 </div>
+
+                <!-- Pack entry section — shown only for products with a package conversion -->
+                <div id="sl-pack-section"
+                    style="display:none;background:var(--bg);border:1px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:12px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <span style="font-size:18px;">📦</span>
+                        <div>
+                            <div style="font-size:13px;font-weight:700;color:var(--accent);">Restock by Pack</div>
+                            <div id="sl-pack-conversion-info" style="font-size:11px;color:var(--muted);">1 pk = ? pc
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label class="form-label" id="sl-pack-label" style="font-size:12px;">Qty in Packs</label>
+                        <input type="number" class="form-input" id="sl-pack-qty" min="1" step="1" placeholder="e.g. 2"
+                            oninput="updatePackPreview()">
+                    </div>
+                    <div id="sl-pack-preview" style="font-size:12px;min-height:16px;margin-top:2px;"></div>
+                </div>
+
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Change Qty</label>
+                        <label class="form-label" id="sl-qty-label">Change Qty</label>
                         <input type="number" class="form-input" id="sl-qty" placeholder="+50 or -10">
                     </div>
                     <div class="form-group">

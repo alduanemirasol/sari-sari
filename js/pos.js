@@ -90,6 +90,7 @@ function renderPosGrid() {
       const retailPrice = pricing ? pricing.retail_price : 0;
       const baseUnit = db.units.find((u) => u.id === p.unit_id);
       const stockLabel = baseUnit ? baseUnit.abbreviation : "pc";
+      const pkgConvPos = getProductPackageConversion(p.id);
       const multiUnitBadge = hasMultiUnits
         ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 Multi-unit</div>`
         : "";
@@ -98,6 +99,11 @@ function renderPosGrid() {
         !hasMultiUnits && isContinuousUnit(p.unit_id)
           ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">⚖️ By weight/vol</div>`
           : "";
+      // Pack conversion badge
+      const packBadge =
+        pkgConvPos && !hasMultiUnits
+          ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 pc or pk</div>`
+          : "";
       return `
     <div class="product-card ${selected}" onclick="addToCart(${p.id})">
       <div class="product-qty-badge">${qty > 0 ? fmtQty(qty, p.unit_id) : 0}</div>
@@ -105,7 +111,7 @@ function renderPosGrid() {
       <div class="product-name">${p.name}</div>
       <div class="product-price">${fmt(retailPrice)}${isContinuousUnit(p.unit_id) ? `<span style="font-size:10px;color:var(--muted)">/${stockLabel}</span>` : ""}</div>
       <div class="product-stock">${p.stock_quantity} ${stockLabel}</div>
-      ${multiUnitBadge}${scaleBadge}
+      ${multiUnitBadge}${scaleBadge}${packBadge}
       ${stockBadge}
     </div>`;
     })
@@ -178,9 +184,15 @@ function addToCart(product_id) {
 
   // Always open the unit picker for:
   //   (a) products with multiple selling units, OR
-  //   (b) products whose base unit is continuous (kg, g, L, ml)
+  //   (b) products whose base unit is continuous (kg, g, L, ml), OR
+  //   (c) products that have a package conversion (can sell by piece OR pack)
   const unitOptions = getProductUnitOptions(product_id);
-  if (unitOptions.length > 0 || isContinuousUnit(product.unit_id)) {
+  const hasPkgConv = !!getProductPackageConversion(product_id);
+  if (
+    unitOptions.length > 0 ||
+    isContinuousUnit(product.unit_id) ||
+    hasPkgConv
+  ) {
     openUnitPickerModal(product_id);
     return;
   }
@@ -202,7 +214,12 @@ function addToCartWithUnit(product_id, unit_id, quantity) {
   }
 
   // Stock check: convert sold unit → base unit before comparing
-  const baseQty = convertToBaseUnits(quantity, unit_id, product.unit_id);
+  const baseQty = convertToBaseUnits(
+    quantity,
+    unit_id,
+    product.unit_id,
+    product.id,
+  );
   if (product.stock_quantity <= 0) {
     showToast("Wala nang stock!", "error");
     return;
@@ -213,7 +230,8 @@ function addToCartWithUnit(product_id, unit_id, quantity) {
     .filter((c) => c.product_id === product_id)
     .reduce(
       (sum, c) =>
-        sum + convertToBaseUnits(c.quantity, c.unit_id, product.unit_id),
+        sum +
+        convertToBaseUnits(c.quantity, c.unit_id, product.unit_id, product.id),
       0,
     );
 
@@ -362,6 +380,48 @@ function openUnitPickerModal(product_id) {
     );
   });
 
+  // Pack option from product_package_conversions (if not already in product_units)
+  const pkgConv = getProductPackageConversion(product_id);
+  if (pkgConv) {
+    const packAlreadyInUnits = unitOptions.some(
+      (pu) => pu.unit_id === pkgConv.pack_unit_id,
+    );
+    if (!packAlreadyInUnits) {
+      const packUnit = db.units.find((u) => u.id === pkgConv.pack_unit_id);
+      const packCartItem = cart.find(
+        (c) =>
+          c.product_id === product_id && c.unit_id === pkgConv.pack_unit_id,
+      );
+      const packInCart = packCartItem ? packCartItem.quantity : 0;
+
+      // Derive a per-pack retail price from the base unit price * pieces_per_pack
+      const baseRetailPrice = defaultPricing ? defaultPricing.retail_price : 0;
+      const packRetailPrice = baseRetailPrice * pkgConv.pieces_per_pack;
+
+      // Build a synthetic pricing object so buildUnitOption can show it
+      const packPricingObj = {
+        retail_price: packRetailPrice,
+        wholesale_price: 0,
+        wholesale_min_qty: 0,
+      };
+
+      optionsHtml += `
+      <button class="unit-picker-opt ${packInCart > 0 ? "selected" : ""}"
+        onclick="addToCartWithUnit(${product_id}, ${pkgConv.pack_unit_id}, 1)">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-weight:700;">Pack <span style="font-size:11px;color:var(--muted)">(${packUnit ? packUnit.abbreviation : "pk"})</span>
+              <span style="font-size:10px;background:var(--accent-light);color:var(--accent);border-radius:4px;padding:1px 5px;margin-left:4px;">${pkgConv.pieces_per_pack} pc/pk</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);">Retail: ${fmt(packRetailPrice)} per pack</div>
+          </div>
+          <div style="font-size:18px;font-weight:800;color:var(--accent)">${fmt(packRetailPrice)}</div>
+        </div>
+        ${packInCart > 0 ? `<div style="font-size:11px;color:var(--green);margin-top:4px;">✓ ${packInCart} pk in cart</div>` : ""}
+      </button>`;
+    }
+  }
+
   document.getElementById("unit-picker-options").innerHTML = optionsHtml;
   openModal("modal-unit-picker");
 }
@@ -419,10 +479,21 @@ function changeCartQty(product_id, unit_id, delta) {
         .filter((c) => c.product_id === product_id && c.unit_id !== unit_id)
         .reduce(
           (sum, c) =>
-            sum + convertToBaseUnits(c.quantity, c.unit_id, product.unit_id),
+            sum +
+            convertToBaseUnits(
+              c.quantity,
+              c.unit_id,
+              product.unit_id,
+              product.id,
+            ),
           0,
         );
-      const newBaseQty = convertToBaseUnits(newQty, unit_id, product.unit_id);
+      const newBaseQty = convertToBaseUnits(
+        newQty,
+        unit_id,
+        product.unit_id,
+        product.id,
+      );
       if (newBaseQty + baseAlreadyInCart > product.stock_quantity) {
         showToast("Hindi na dagdag, ubos na stock!", "warning");
         return;
@@ -647,7 +718,12 @@ function checkout() {
     // Convert sold qty → product's base unit before deducting stock
     // e.g. selling 1.5 kg of rice deducts 1.5 from stock_quantity (tracked in kg)
     // e.g. selling 1 L of Toyo deducts 1000 from stock if stock is tracked in ml
-    const baseQty = convertToBaseUnits(item.quantity, item.unit_id, p.unit_id);
+    const baseQty = convertToBaseUnits(
+      item.quantity,
+      item.unit_id,
+      p.unit_id,
+      p.id,
+    );
     p.stock_quantity = parseFloat((p.stock_quantity - baseQty).toFixed(4));
     db.stock_logs.push({
       id: genId("stock_logs"),

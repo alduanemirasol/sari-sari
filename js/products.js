@@ -30,8 +30,12 @@ function renderProducts() {
             ? `<span class="badge badge-yellow">${p.stock_quantity}</span>`
             : `<span class="badge badge-green">${p.stock_quantity}</span>`;
       const catName = getProductCategory(p);
+      const pkgConv = getProductPackageConversion(p.id);
+      const pkgBadge = pkgConv
+        ? `<div style="font-size:10px;color:var(--accent);margin-top:2px;font-weight:600;">📦 1 pk = ${pkgConv.pieces_per_pack} pc</div>`
+        : "";
       return `<tr>
-    <td><span style="font-size:18px">${p.image_url}</span> <strong>${p.name}</strong></td>
+    <td><span style="font-size:18px">${p.image_url}</span> <strong>${p.name}</strong>${pkgBadge}</td>
     <td><span class="badge badge-blue">${catName}</span></td>
     <td>${stockBadge}</td>
     <td style="color:var(--accent)">${pricing ? fmt(pricing.retail_price) : "—"}</td>
@@ -46,77 +50,17 @@ function renderProducts() {
     .join("");
 }
 
-// ── Unit-aware form helpers ────────────────────────────────────────────────
-
-/**
- * Config per unit_id: step size, stock placeholder, hint text, and
- * whether to show a "convert from larger unit" helper (e.g. enter kg → shows g).
- */
-const UNIT_CONFIG = {
-  1: {
-    abbr: "pc",
-    step: 1,
-    placeholder: "50",
-    hint: "Number of individual pieces in stock.",
-  },
-  2: {
-    abbr: "L",
-    step: 0.5,
-    placeholder: "10",
-    hint: "Total liters in stock. Use decimals for partial liters (e.g. 2.5 L).",
-  },
-  3: {
-    abbr: "ml",
-    step: 100,
-    placeholder: "5000",
-    hint: "Total milliliters in stock (e.g. 5 × 1L bottles = 5000 ml).",
-  },
-  4: {
-    abbr: "kg",
-    step: 0.5,
-    placeholder: "10",
-    hint: "Total kilograms in stock. Use decimals for grams (e.g. 1.5 kg).",
-  },
-  5: {
-    abbr: "g",
-    step: 50,
-    placeholder: "1000",
-    hint: "Total grams in stock (e.g. 1 kg bag = 1000 g).",
-  },
-};
-
-function onProductUnitChange() {
-  const unitId = parseInt(document.getElementById("p-unit").value) || 1;
-  const cfg = UNIT_CONFIG[unitId] || UNIT_CONFIG[1];
-
-  // Update label, badge, step, placeholder and hint
-  document.getElementById("p-stock-label").textContent =
-    `Stock Qty (${cfg.abbr})`;
-  document.getElementById("p-stock-unit-badge").textContent = cfg.abbr;
-  document.getElementById("p-stock").step = cfg.step;
-  document.getElementById("p-stock").placeholder = cfg.placeholder;
-  document.getElementById("p-stock-hint").textContent = cfg.hint;
-
-  // Show a retail price label hint tailored to the unit
-  const priceHint = document.getElementById("p-retail-hint");
-  if (priceHint) {
-    priceHint.textContent =
-      unitId === 1 ? "Price per piece." : `Price per 1 ${cfg.abbr}.`;
-  }
-}
-
 function openAddProduct() {
   editingProductId = null;
   document.getElementById("product-modal-title").textContent = "Add Product";
   document.getElementById("p-name").value = "";
-  document.getElementById("p-unit").value = "1"; // default: piece
   document.getElementById("p-stock").value = "50";
   document.getElementById("p-retail").value = "1.00";
   document.getElementById("p-wholesale").value = "0.65";
   document.getElementById("p-minqty").value = "24";
   document.getElementById("p-wholesale-enabled").checked = false;
   toggleWholesaleSection();
-  onProductUnitChange(); // sync labels
+  resetPackageSection();
   renderProductUnitRows([]);
   openModal("modal-product");
 }
@@ -137,8 +81,6 @@ function editProduct(id) {
     "I-edit ang Produkto";
   document.getElementById("p-name").value = p.name;
   document.getElementById("p-category").value = p.product_category_id;
-  document.getElementById("p-unit").value = p.unit_id || 1;
-  onProductUnitChange(); // sync labels to the loaded unit
   document.getElementById("p-stock").value = p.stock_quantity;
   document.getElementById("p-retail").value = pricing
     ? pricing.retail_price
@@ -155,6 +97,10 @@ function editProduct(id) {
   document.getElementById("p-wholesale-enabled").checked = hasWholesale;
   toggleWholesaleSection();
 
+  // Load package conversion if any
+  const existingPkgConv = getProductPackageConversion(id);
+  loadPackageSection(existingPkgConv);
+
   // Load existing unit rows
   const existingUnits = getProductUnitOptions(id);
   renderProductUnitRows(existingUnits);
@@ -169,7 +115,6 @@ function saveProduct() {
   }
 
   const catId = parseInt(document.getElementById("p-category").value);
-  const unitId = parseInt(document.getElementById("p-unit").value) || 1;
   const retailPrice = parseFloat(document.getElementById("p-retail").value);
   const wholesaleEnabled = document.getElementById(
     "p-wholesale-enabled",
@@ -185,7 +130,6 @@ function saveProduct() {
     const p = db.products.find((x) => x.id === editingProductId);
     p.name = name;
     p.product_category_id = catId;
-    p.unit_id = unitId;
     p.stock_quantity = parseInt(document.getElementById("p-stock").value);
     p.image_url = getCategoryEmoji(catId);
 
@@ -207,6 +151,9 @@ function saveProduct() {
         effective_date: todayISO(),
       });
     }
+
+    // Save / update package conversion
+    savePackageConversion(editingProductId);
 
     // Replace product_units for this product with pendingProductUnits
     db.product_units = db.product_units.filter(
@@ -233,7 +180,7 @@ function saveProduct() {
       id: newId,
       name,
       product_category_id: catId,
-      unit_id: unitId,
+      unit_id: 1, // default: piece
       stock_quantity: parseInt(document.getElementById("p-stock").value),
       image_url: getCategoryEmoji(catId),
       is_active: true,
@@ -247,6 +194,9 @@ function saveProduct() {
       wholesale_min_qty: wholesaleMinQty,
       effective_date: todayISO(),
     });
+
+    // Save package conversion for new product
+    savePackageConversion(newId);
 
     // Save product_units
     pendingProductUnits.forEach((pu) => {
@@ -366,5 +316,69 @@ function removeProductUnitRow(index) {
 function updatePendingUnit(index, field, value) {
   if (pendingProductUnits[index]) {
     pendingProductUnits[index][field] = value;
+  }
+}
+
+// ============================================================
+// PACKAGE CONVERSION SECTION (product modal)
+// ============================================================
+
+/**
+ * Reset the package conversion form to its default empty/hidden state.
+ * Called when opening the Add Product modal.
+ */
+function resetPackageSection() {
+  document.getElementById("p-pkg-enabled").checked = false;
+  document.getElementById("p-pkg-pieces").value = "";
+  togglePackageSection();
+}
+
+/**
+ * Populate the package section fields from an existing conversion row.
+ * Called when opening the Edit Product modal.
+ */
+function loadPackageSection(pkgConv) {
+  if (pkgConv) {
+    document.getElementById("p-pkg-enabled").checked = true;
+    document.getElementById("p-pkg-pieces").value = pkgConv.pieces_per_pack;
+  } else {
+    document.getElementById("p-pkg-enabled").checked = false;
+    document.getElementById("p-pkg-pieces").value = "";
+  }
+  togglePackageSection();
+}
+
+/** Show/hide the package details sub-section based on the checkbox. */
+function togglePackageSection() {
+  const enabled = document.getElementById("p-pkg-enabled").checked;
+  document.getElementById("p-pkg-details").style.display = enabled
+    ? "block"
+    : "none";
+}
+
+/**
+ * Persist the package conversion for a given product_id.
+ * Reads the form state; creates, updates, or removes the row as needed.
+ */
+function savePackageConversion(product_id) {
+  if (!db.product_package_conversions) db.product_package_conversions = [];
+
+  const enabled = document.getElementById("p-pkg-enabled").checked;
+  const piecesPerPack =
+    parseInt(document.getElementById("p-pkg-pieces").value) || 0;
+
+  // Remove any existing conversion for this product first
+  db.product_package_conversions = db.product_package_conversions.filter(
+    (c) => c.product_id !== product_id,
+  );
+
+  if (enabled && piecesPerPack > 0) {
+    db.product_package_conversions.push({
+      id: genId("product_package_conversions"),
+      product_id,
+      pack_unit_id: 6, // unit_id 6 = pack
+      base_unit_id: 1, // unit_id 1 = piece (the base unit the product is tracked in)
+      pieces_per_pack: piecesPerPack,
+    });
   }
 }
