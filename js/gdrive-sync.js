@@ -26,6 +26,11 @@ const GDRIVE = {
   LS_TOKEN_KEY: "tindahan_gdrive_token",
   LS_FOLDER_KEY: "tindahan_gdrive_folder_id",
   LS_LAST_SYNC_KEY: "tindahan_gdrive_last_sync",
+  LS_LAST_HASH_KEY: "tindahan_gdrive_last_hash",   // hash of last uploaded snapshot
+  LS_INCREMENTAL_KEY: "tindahan_gdrive_incremental", // accumulated incremental patches
+
+  // ── Incremental state ──────────────────────────────────────
+  lastUploadedHash: null,   // fingerprint of the last full backup sent to Drive
 };
 
 // ── Init ──────────────────────────────────────────────────────
@@ -37,6 +42,8 @@ async function gdriveInit() {
   if (storedToken) GDRIVE.accessToken = storedToken;
   if (storedFolder) GDRIVE.driveBackupFolderId = storedFolder;
   if (storedSync) GDRIVE.lastSyncAt = storedSync;
+  const storedHash = localStorage.getItem(GDRIVE.LS_LAST_HASH_KEY);
+  if (storedHash) GDRIVE.lastUploadedHash = storedHash;
 
   await new Promise((resolve) => {
     if (typeof gapi !== "undefined") {
@@ -121,6 +128,9 @@ function gdriveSignOut() {
   localStorage.removeItem(GDRIVE.LS_TOKEN_KEY);
   localStorage.removeItem(GDRIVE.LS_FOLDER_KEY);
   localStorage.removeItem(GDRIVE.LS_LAST_SYNC_KEY);
+  localStorage.removeItem(GDRIVE.LS_LAST_HASH_KEY);
+  localStorage.removeItem(GDRIVE.LS_INCREMENTAL_KEY);
+  GDRIVE.lastUploadedHash = null;
   gdriveStopAutoSync();
   gdriveUpdateUI(false);
   showToast("Na-disconnect sa Google Drive.", "warning");
@@ -141,6 +151,33 @@ function gdriveStopAutoSync() {
   }
 }
 
+// ── Hash a string (FNV-1a 32-bit, fast + compact) ────────────
+function gdriveHashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+// ── Compute incremental diff between two plain objects ───────
+// Returns { added, updated, deleted } — only top-level keys.
+function gdriveDiffDb(oldObj, newObj) {
+  const added = {}, updated = {}, deleted = [];
+  for (const key of Object.keys(newObj)) {
+    if (!(key in oldObj)) {
+      added[key] = newObj[key];
+    } else if (JSON.stringify(oldObj[key]) !== JSON.stringify(newObj[key])) {
+      updated[key] = newObj[key];
+    }
+  }
+  for (const key of Object.keys(oldObj)) {
+    if (!(key in newObj)) deleted.push(key);
+  }
+  return { added, updated, deleted };
+}
+
 // ── Compress a string to gzip Blob ──────────────────────────
 async function gdriveCompress(str) {
   const stream = new Blob([str])
@@ -159,6 +196,15 @@ async function gdriveDecompress(buffer) {
 }
 
 // ── Core Sync ─────────────────────────────────────────────────
+// Strategy:
+//   • Always serialise the DB to JSON (human-readable, browsable in Drive).
+//   • Skip the upload entirely when nothing has changed (hash check).
+//   • On first sync of the day (or when hash changes significantly) write a
+//     full snapshot: tindahan_backup_YYYY-MM-DD.json
+//   • On subsequent same-day syncs where data changed, append an incremental
+//     patch file: tindahan_patch_YYYY-MM-DD_HHmmss.json
+//     The patch contains only the added/updated/deleted top-level keys plus
+//     metadata so a restore tool can replay it on top of the day's snapshot.
 async function gdriveSyncNow() {
   if (!GDRIVE.isSignedIn || GDRIVE.isSyncing) return;
   GDRIVE.isSyncing = true;
@@ -168,55 +214,113 @@ async function gdriveSyncNow() {
     // 1. Ensure backup folder exists in Drive
     const folderId = await gdriveGetOrCreateFolder(GDRIVE.FOLDER_NAME);
 
-    // 2. Serialize full DB
-    const jsonStr = JSON.stringify(db);
+    // 2. Serialize full DB to JSON
+    const jsonStr = JSON.stringify(db, null, 2);
+    const currentHash = gdriveHashString(jsonStr);
 
-    // 3. Compress with gzip
-    const blob = await gdriveCompress(jsonStr);
+    // 3. Skip upload if data has not changed since last sync
+    if (currentHash === GDRIVE.lastUploadedHash) {
+      console.log("GDrive: no changes detected, skipping upload.");
+      GDRIVE.lastSyncAt = new Date().toISOString();
+      localStorage.setItem(GDRIVE.LS_LAST_SYNC_KEY, GDRIVE.lastSyncAt);
+      gdriveUpdateLastSyncLabel();
+      return; // silent — no toast needed
+    }
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, ""); // HHmmss
+
+    // 4. Decide: full snapshot or incremental patch?
+    const snapshotName = `tindahan_backup_${dateStr}.json`;
+    const snapshotExists = !!(await gdriveFindFile(snapshotName, folderId));
+
     const rawKB = (new TextEncoder().encode(jsonStr).length / 1024).toFixed(1);
-    const gzipKB = (blob.size / 1024).toFixed(1);
-    const savings = Math.round(
-      (1 - blob.size / new TextEncoder().encode(jsonStr).length) * 100,
-    );
-    console.log(
-      "GDrive backup: " +
-        rawKB +
-        " KB raw -> " +
-        gzipKB +
-        " KB gzip (" +
-        savings +
-        "% saved)",
-    );
 
-    // 4. Upload compressed backup (overwrites same-day file)
-    const fileName =
-      "tindahan_backup_" + new Date().toISOString().slice(0, 10) + ".json.gz";
-    await gdriveUploadFile(blob, fileName, "application/gzip", folderId);
+    if (!snapshotExists) {
+      // ── Full snapshot (JSON) ────────────────────────────────
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      await gdriveUploadFile(blob, snapshotName, "application/json", folderId);
+      console.log(`GDrive full snapshot: ${rawKB} KB → ${snapshotName}`);
+      showToast(`☁️ Full backup saved! (${rawKB} KB)`);
+    } else {
+      // ── Incremental patch (JSON) ────────────────────────────
+      // Build diff against the last uploaded state stored locally.
+      const lastRaw = localStorage.getItem(GDRIVE.LS_INCREMENTAL_KEY);
+      const lastDb = lastRaw ? JSON.parse(lastRaw) : {};
+      const diff = gdriveDiffDb(lastDb, db);
+      const hasChanges =
+        Object.keys(diff.added).length > 0 ||
+        Object.keys(diff.updated).length > 0 ||
+        diff.deleted.length > 0;
 
-    // 5. Record sync time
-    GDRIVE.lastSyncAt = new Date().toISOString();
+      if (!hasChanges) {
+        // Structural diff found no top-level changes — update hash and exit.
+        GDRIVE.lastUploadedHash = currentHash;
+        localStorage.setItem(GDRIVE.LS_LAST_HASH_KEY, currentHash);
+        GDRIVE.lastSyncAt = now.toISOString();
+        localStorage.setItem(GDRIVE.LS_LAST_SYNC_KEY, GDRIVE.lastSyncAt);
+        gdriveUpdateLastSyncLabel();
+        return;
+      }
+
+      const patch = {
+        _meta: {
+          type: "incremental_patch",
+          baseSnapshot: snapshotName,
+          patchedAt: now.toISOString(),
+          hash: currentHash,
+        },
+        added: diff.added,
+        updated: diff.updated,
+        deleted: diff.deleted,
+      };
+      const patchStr = JSON.stringify(patch, null, 2);
+      const patchName = `tindahan_patch_${dateStr}_${timeStr}.json`;
+      const patchBlob = new Blob([patchStr], { type: "application/json" });
+      const patchKB = (new TextEncoder().encode(patchStr).length / 1024).toFixed(1);
+
+      await gdriveUploadFile(patchBlob, patchName, "application/json", folderId);
+      console.log(`GDrive incremental patch: ${patchKB} KB → ${patchName}`);
+      showToast(`☁️ Incremental backup saved! (${patchKB} KB patch)`);
+    }
+
+    // 5. Persist new hash + snapshot state locally
+    GDRIVE.lastUploadedHash = currentHash;
+    localStorage.setItem(GDRIVE.LS_LAST_HASH_KEY, currentHash);
+    localStorage.setItem(GDRIVE.LS_INCREMENTAL_KEY, jsonStr); // keep full state for next diff
+
+    // 6. Record sync time
+    GDRIVE.lastSyncAt = now.toISOString();
     localStorage.setItem(GDRIVE.LS_LAST_SYNC_KEY, GDRIVE.lastSyncAt);
     gdriveUpdateLastSyncLabel();
-    showToast("Backed up to Drive! (" + gzipKB + " KB)");
+
   } catch (err) {
     console.error("GDrive sync error:", err);
     if (err.status === 401) {
       GDRIVE.isSignedIn = false;
       gdriveUpdateUI(false);
-      showToast(
-        "Google Drive session expired. Please sign in again.",
-        "warning",
-      );
+      showToast("Google Drive session expired. Please sign in again.", "warning");
     } else {
-      showToast(
-        "Google Drive sync failed: " + (err.message || err.status),
-        "error",
-      );
+      showToast("Google Drive sync failed: " + (err.message || err.status), "error");
     }
   } finally {
     GDRIVE.isSyncing = false;
     gdriveSyncStatusBusy(false);
   }
+}
+
+// ── Restore incremental patches on top of a base snapshot ────
+// Called automatically by gdriveRestoreBackup when user picks a patch file.
+async function gdriveApplyPatches(baseDb, patches) {
+  let result = { ...baseDb };
+  for (const patch of patches) {
+    if (patch._meta?.type !== "incremental_patch") continue;
+    Object.assign(result, patch.added || {});
+    Object.assign(result, patch.updated || {});
+    for (const key of (patch.deleted || [])) delete result[key];
+  }
+  return result;
 }
 
 // ── Upload a single file (multipart) ─────────────────────────
@@ -302,8 +406,8 @@ async function gdriveListBackups() {
   const folderId = await gdriveGetOrCreateFolder(GDRIVE.FOLDER_NAME);
   const resp = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
-      `'${folderId}' in parents and (mimeType='application/json' or mimeType='application/gzip') and trashed=false`,
-    )}&orderBy=createdTime+desc&pageSize=20&fields=files(id,name,size,createdTime)`,
+      `'${folderId}' in parents and mimeType='application/json' and trashed=false`,
+    )}&orderBy=createdTime+desc&pageSize=50&fields=files(id,name,size,createdTime)`,
     { headers: { Authorization: `Bearer ${GDRIVE.accessToken}` } },
   );
   if (!resp.ok) return [];
@@ -330,17 +434,58 @@ async function gdriveRestoreBackup(fileId, fileName) {
 
     let json;
     if (fileName.endsWith(".gz")) {
-      // Decompress gzip backup
+      // Legacy gzip backup
       const buffer = await resp.arrayBuffer();
       const jsonStr = await gdriveDecompress(buffer);
       json = JSON.parse(jsonStr);
     } else {
-      // Plain JSON backup (legacy)
       json = await resp.json();
     }
 
-    // Strip backup metadata before restoring
-    // Write to localStorage and reload
+    // If this is an incremental patch file, reconstruct from its base snapshot
+    if (json._meta?.type === "incremental_patch") {
+      const baseSnapshotName = json._meta.baseSnapshot;
+      showToast(`⏳ Loading base snapshot: ${baseSnapshotName}…`);
+
+      const folderId = await gdriveGetOrCreateFolder(GDRIVE.FOLDER_NAME);
+      const baseId = await gdriveFindFile(baseSnapshotName, folderId);
+      if (!baseId) throw new Error(`Base snapshot "${baseSnapshotName}" not found in Drive.`);
+
+      const baseResp = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${baseId}?alt=media`,
+        { headers: { Authorization: "Bearer " + GDRIVE.accessToken } },
+      );
+      if (!baseResp.ok) throw new Error("Failed to download base snapshot.");
+      const baseDb = await baseResp.json();
+
+      // Gather all patches between the snapshot and the selected patch (inclusive),
+      // sorted by name (which encodes timestamp).
+      const allFiles = await gdriveListBackups();
+      const relevantPatches = allFiles
+        .filter(
+          (f) =>
+            f.name.startsWith("tindahan_patch_" + baseSnapshotName.slice(16, 26)) &&
+            f.name <= fileName,
+        )
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const patchObjects = await Promise.all(
+        relevantPatches.map(async (f) => {
+          const r = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+            { headers: { Authorization: "Bearer " + GDRIVE.accessToken } },
+          );
+          return r.ok ? r.json() : null;
+        }),
+      );
+
+      json = await gdriveApplyPatches(baseDb, patchObjects.filter(Boolean));
+      showToast(`✅ Replayed ${patchObjects.length} patch(es) onto snapshot.`);
+    }
+
+    // Strip any backup metadata before restoring
+    delete json._meta;
+
     localStorage.setItem("tindahan_db", JSON.stringify(json));
     showToast("Restored! Reloading page...");
     setTimeout(() => location.reload(), 1500);
@@ -478,9 +623,17 @@ async function gdriveOpenBackupsModal() {
         const size = f.size
           ? (parseInt(f.size) / 1024).toFixed(1) + " KB"
           : "—";
+        const isSnapshot = f.name.startsWith("tindahan_backup_");
+        const isPatch = f.name.startsWith("tindahan_patch_");
+        const icon = isSnapshot ? "🗂️" : isPatch ? "🔧" : "📄";
+        const badge = isSnapshot
+          ? `<span style="font-size:10px;background:var(--green,#2da44e);color:#fff;border-radius:4px;padding:1px 5px;margin-left:6px;">FULL</span>`
+          : isPatch
+          ? `<span style="font-size:10px;background:var(--blue,#0969da);color:#fff;border-radius:4px;padding:1px 5px;margin-left:6px;">PATCH</span>`
+          : "";
         return `<div class="gdrive-backup-row">
           <div>
-            <div style="font-weight:600;font-size:13px;">📄 ${f.name}</div>
+            <div style="font-weight:600;font-size:13px;">${icon} ${f.name}${badge}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px;">${d.toLocaleString("en-PH")} · ${size}</div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="gdriveRestoreBackup('${f.id}','${f.name}')">🔄 Restore</button>
